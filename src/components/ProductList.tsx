@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
 import { useTranslation } from 'react-i18next';
+import Image from "next/image";
 import { CardBody, CardContainer, CardItem } from "@/components/ui/3d-card";
 
 const apps = [
@@ -40,11 +40,10 @@ export function ProductList() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500 inline-block mb-4">
-            My Applications
+            {t('products.title', 'My Applications')}
           </h2>
           <p className="text-gray-300 max-w-2xl mx-auto text-lg">
-            Browse through my collection of carefully crafted applications. 
-            Each app is built with modern technologies and designed for the best user experience.
+            {t('products.description', 'Browse through my collection of carefully crafted applications. Each app is built with modern technologies and designed for the best user experience.')}
           </p>
         </div>
 
@@ -56,11 +55,11 @@ export function ProductList() {
                   translateZ="100"
                   className="w-full mt-4"
                 >
-                  <img
+                  <Image
                     src={app.image}
                     alt={app.title}
-                    height="200"
-                    width="400"
+                    height={200}
+                    width={400}
                     className="h-52 w-full object-cover rounded-xl group-hover/card:shadow-xl"
                   />
                 </CardItem>
@@ -98,7 +97,7 @@ export function ProductList() {
                   <div className="flex items-center justify-between">
                     <span className="text-xl font-bold text-purple-400">{app.price}</span>
                     <button className="px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium">
-                      View Details
+                      {t('products.viewDetails', 'View Details')}
                     </button>
                   </div>
                 </CardItem>

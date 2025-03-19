@@ -14,10 +14,10 @@ export function ContactSection() {
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-20">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500 inline-block mb-4">
-            Get in Touch
+            {t('contact.getInTouch', 'Get in Touch')}
           </h2>
           <p className="text-gray-300 max-w-2xl mx-auto">
-            Interested in my apps or need custom development? I'm always open to discussing new projects or opportunities.
+            Interested in my apps or need custom development? I&apos;m always open to discussing new projects or opportunities.
           </p>
         </div>
 

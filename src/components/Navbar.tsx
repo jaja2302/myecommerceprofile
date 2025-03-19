@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
-  const { t, i18n, ready } = useTranslation();
+  const { t, i18n } = useTranslation();
   
   useEffect(() => {
     const handleScroll = () => {

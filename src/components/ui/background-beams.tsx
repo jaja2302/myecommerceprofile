@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
 
 export function BackgroundBeams({
@@ -10,7 +10,6 @@ export function BackgroundBeams({
   className?: string;
   children?: React.ReactNode;
 }) {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -20,10 +19,6 @@ export function BackgroundBeams({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const handleMouseMove = (event: MouseEvent) => {
-      setMousePosition({ x: event.clientX, y: event.clientY });
-    };
-
     const handleResize = () => {
       if (canvas) {
         canvas.width = window.innerWidth;
@@ -31,7 +26,6 @@ export function BackgroundBeams({
       }
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("resize", handleResize);
     handleResize();
 
@@ -101,7 +95,6 @@ export function BackgroundBeams({
 
     const animationId = setInterval(render, 40);
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("resize", handleResize);
       clearInterval(animationId);
     };

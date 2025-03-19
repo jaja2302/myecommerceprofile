@@ -37,7 +37,7 @@ export function CompanyProfile() {
     <BackgroundBeamsWithCollision className="min-h-screen py-24">
       <div className="max-w-7xl mx-auto p-4 z-10 relative">
         <p className="text-neutral-300 max-w-2xl mx-auto my-8 text-lg text-center">
-          I'm a passionate full-stack developer with expertise in web and mobile development. 
+          I&apos;m a passionate full-stack developer with expertise in web and mobile development. 
           Specializing in creating modern, efficient, and user-friendly applications.
         </p>
         
@@ -57,7 +57,7 @@ export const HoverEffect = ({
   }[];
   className?: string;
 }) => {
-  let [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   return (
     <div

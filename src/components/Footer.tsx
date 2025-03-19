@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
 import { useTranslation } from 'react-i18next';
 import { FaInstagram } from "react-icons/fa";
 export function Footer() {
@@ -13,10 +12,10 @@ export function Footer() {
       <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <h3 className="text-xl font-bold text-white mb-4">About Me</h3>
+            <h3 className="text-xl font-bold text-white mb-4">{t('footer.aboutMe', 'About Me')}</h3>
             <p className="text-gray-400 mb-4">
               A passionate developer creating high-quality applications and digital solutions.
-              Let's work together to bring your ideas to life.
+              Let&apos;s work together to bring your ideas to life.
             </p>
             <div className="flex space-x-4">
                 <a href="https://www.instagram.com/jaja_valentinoo/" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors">  <FaInstagram /> </a>

@@ -13,7 +13,6 @@ export function BackgroundGradient({
   children?: React.ReactNode;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const [isFocused, setIsFocused] = React.useState(false);
   const [position, setPosition] = React.useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = React.useState(0);
 
@@ -25,12 +24,10 @@ export function BackgroundGradient({
   };
 
   const handleFocus = () => {
-    setIsFocused(true);
     setOpacity(1);
   };
 
   const handleBlur = () => {
-    setIsFocused(false);
     setOpacity(0);
   };
 

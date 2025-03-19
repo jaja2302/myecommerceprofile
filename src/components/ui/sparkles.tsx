@@ -3,12 +3,19 @@
 import React from "react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/utils/cn";
-import { motion } from "framer-motion";
+
+interface Particle {
+  x: number;
+  y: number;
+  size: number;
+  speedX: number;
+  speedY: number;
+}
 
 export const SparklesCore = ({
   background,
-  minSize,
-  maxSize,
+  minSize = 1,
+  maxSize = 2,
   particleDensity,
   particleColor,
   className,
@@ -23,8 +30,8 @@ export const SparklesCore = ({
   id?: string;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particles = useRef<any[]>([]);
-  const animationFrameId = useRef<number>();
+  const particles = useRef<Particle[]>([]);
+  const animationFrameId = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -43,13 +50,13 @@ export const SparklesCore = ({
 
     const createParticles = () => {
       const density = particleDensity || 100;
-      const particlesArray: any[] = [];
+      const particlesArray: Particle[] = [];
 
       for (let i = 0; i < density; i++) {
         particlesArray.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
-          size: Math.random() * (maxSize || 2 - minSize || 1) + (minSize || 1),
+          size: Math.random() * (maxSize - minSize) + minSize,
           speedX: Math.random() * 0.5 - 0.25,
           speedY: Math.random() * 0.5 - 0.25,
         });
