@@ -1,27 +1,27 @@
 {
     "nav": {
-        "about": "Tentang",
-        "products": "Produk",
-        "testimonials": "Testimoni",
+        "about": "Tentang Saya",
+        "products": "Aplikasi Saya",
+        "testimonials": "Ulasan",
         "contact": "Kontak",
-        "download": "Unduh"
+        "download": "Lihat Apps"
     },
     "hero": {
-        "title": "Digita",
+        "title": "Developer",
         "words": {
-            "innovative": "Inovatif.",
-            "powerful": "Bertenaga.",
-            "seamless": "Mulus.",
-            "beautiful": "Indah."
+            "innovative": "Aplikasi Mobile.",
+            "powerful": "Aplikasi Web.",
+            "seamless": "E-commerce.",
+            "beautiful": "Solusi."
         },
-        "description": "Rasakan performa yang mulus, desain yang memukau, dan fitur-fitur canggih dalam aplikasi mutakhir kami.",
+        "description": "Hai! Saya adalah developer yang berdedikasi menciptakan aplikasi berkualitas tinggi. Jelajahi koleksi aplikasi dan solusi digital saya yang tersedia untuk dibeli.",
         "buttons": {
-            "getStarted": "Mulai",
-            "learnMore": "Pelajari Lebih"
+            "getStarted": "Lihat Apps",
+            "learnMore": "Tentang Saya"
         },
         "appCard": {
-            "title": "Nama Aplikasi Anda",
-            "subtitle": "Solusi terbaik untuk kebutuhan Anda"
+            "title": "Aplikasi Unggulan",
+            "subtitle": "Lihat karya terbaru saya"
         }
     }
 }

@@ -1,27 +1,27 @@
 {
     "nav": {
-        "about": "About",
-        "products": "Products",
-        "testimonials": "Testimonials",
+        "about": "About Me",
+        "products": "My Apps",
+        "testimonials": "Reviews",
         "contact": "Contact",
-        "download": "Download"
+        "download": "View Apps"
     },
     "hero": {
-        "title": "Digita",
+        "title": "Developer",
         "words": {
-            "innovative": "Innovative.",
-            "powerful": "Powerful.",
-            "seamless": "Seamless.",
-            "beautiful": "Beautiful."
+            "innovative": "Mobile Apps.",
+            "powerful": "Web Apps.",
+            "seamless": "E-commerce.",
+            "beautiful": "Solutions."
         },
-        "description": "Experience seamless performance, stunning design, and powerful features in our cutting-edge application.",
+        "description": "Hi! I'm a passionate developer creating high-quality applications. Browse my collection of apps and digital solutions available for purchase.",
         "buttons": {
-            "getStarted": "Get Started",
-            "learnMore": "Learn More"
+            "getStarted": "View Apps",
+            "learnMore": "About Me"
         },
         "appCard": {
-            "title": "Your App Name",
-            "subtitle": "The ultimate solution for your needs"
+            "title": "Featured App",
+            "subtitle": "Check out my latest creation"
         }
     }
 }

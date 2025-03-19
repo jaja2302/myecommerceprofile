@@ -2,115 +2,111 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { BackgroundGradient } from "@/components/ui/background-gradient";
+import { useTranslation } from 'react-i18next';
+import { CardBody, CardContainer, CardItem } from "@/components/ui/3d-card";
 
-const products = [
+const apps = [
   {
-    id: 1,
-    name: "Premium App Suite",
-    description: "Complete solution for businesses with advanced features",
-    price: "$99.99",
-    features: ["Unlimited Users", "Priority Support", "Custom Branding", "Advanced Analytics"],
-    image: "/product1.jpg",
-    popular: true,
+    title: "E-commerce App",
+    description: "Complete online store solution with admin dashboard",
+    image: "/ecommerce-app.png",
+    price: "$99",
+    link: "#",
+    tags: ["React Native", "Node.js", "MongoDB"]
   },
   {
-    id: 2,
-    name: "Essential Package",
-    description: "Perfect for small teams and startups",
-    price: "$49.99",
-    features: ["Up to 10 Users", "Email Support", "Basic Analytics", "Core Features"],
-    image: "/product2.jpg",
-    popular: false,
+    title: "Task Manager Pro",
+    description: "Advanced task management for teams",
+    image: "/task-manager.png",
+    price: "$49",
+    link: "#",
+    tags: ["React", "Firebase", "Material UI"]
   },
   {
-    id: 3,
-    name: "Basic Solution",
-    description: "Get started with our entry-level package",
-    price: "$29.99",
-    features: ["Up to 3 Users", "Community Support", "Standard Features", "Basic Reporting"],
-    image: "/product3.jpg",
-    popular: false,
-  },
+    title: "Social Media Dashboard",
+    description: "Analytics and management platform",
+    image: "/social-dashboard.png",
+    price: "$79",
+    link: "#",
+    tags: ["Next.js", "TypeScript", "Tailwind"]
+  }
 ];
 
 export function ProductList() {
+  const { t } = useTranslation();
+
   return (
-    <section id="products" className="w-full bg-black py-20">
-      <div className="container mx-auto px-4">
+    <div className="relative min-h-screen w-full bg-black py-20" id="products">
+      <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 inline-block mb-4">Our Products</h2>
-          <div className="h-1 w-20 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 mx-auto"></div>
-          <p className="text-gray-300 mt-4 max-w-2xl mx-auto">
-            Discover our cutting-edge solutions designed to transform your digital experience
+          <h2 className="text-4xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500 inline-block mb-4">
+            My Applications
+          </h2>
+          <p className="text-gray-300 max-w-2xl mx-auto text-lg">
+            Browse through my collection of carefully crafted applications. 
+            Each app is built with modern technologies and designed for the best user experience.
           </p>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
+          {apps.map((app) => (
+            <CardContainer key={app.title} className="inter-var">
+              <CardBody className="bg-black/40 relative group/card dark:hover:shadow-2xl dark:hover:shadow-purple-500/[0.1] dark:bg-black dark:border-white/[0.2] border-black/[0.1] w-auto sm:w-[25rem] h-auto rounded-xl p-6 border">
+                <CardItem
+                  translateZ="100"
+                  className="w-full mt-4"
+                >
+                  <img
+                    src={app.image}
+                    alt={app.title}
+                    height="200"
+                    width="400"
+                    className="h-52 w-full object-cover rounded-xl group-hover/card:shadow-xl"
+                  />
+                </CardItem>
+                
+                <CardItem
+                  translateZ="50"
+                  className="text-2xl font-bold text-white mt-4"
+                >
+                  {app.title}
+                </CardItem>
+                <CardItem
+                  as="p"
+                  translateZ="60"
+                  className="text-neutral-300 text-sm mt-2 mb-4"
+                >
+                  {app.description}
+                </CardItem>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {app.tags.map((tag) => (
+                    <CardItem
+                      key={tag}
+                      translateZ="30"
+                      className="text-xs bg-purple-500/10 text-purple-400 px-2 py-1 rounded-full"
+                    >
+                      {tag}
+                    </CardItem>
+                  ))}
+                </div>
+
+                <CardItem
+                  translateZ="30"
+                  className="w-full mt-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xl font-bold text-purple-400">{app.price}</span>
+                    <button className="px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium">
+                      View Details
+                    </button>
+                  </div>
+                </CardItem>
+              </CardBody>
+            </CardContainer>
           ))}
         </div>
       </div>
-    </section>
-  );
-}
-
-function ProductCard({ product }: { product: typeof products[number] }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      viewport={{ once: true }}
-      className="relative"
-    >
-      <BackgroundGradient className="rounded-xl">
-        <div className="relative p-6 h-full bg-black bg-opacity-80 rounded-xl overflow-hidden">
-          {product.popular && (
-            <div className="absolute top-0 right-0">
-              <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg rounded-tr-lg">
-                POPULAR
-              </div>
-            </div>
-          )}
-          
-          <div className="h-40 mb-4 overflow-hidden rounded-lg">
-            <img 
-              src={product.image} 
-              alt={product.name} 
-              className="w-full h-full object-cover transition-transform hover:scale-110 duration-700"
-            />
-          </div>
-          
-          <h3 className="text-xl font-bold text-white mb-2">{product.name}</h3>
-          <p className="text-gray-300 text-sm mb-4">{product.description}</p>
-          
-          <div className="mb-6">
-            <ul className="space-y-2">
-              {product.features.map((feature, index) => (
-                <li key={index} className="flex items-center text-gray-300 text-sm">
-                  <svg className="w-4 h-4 mr-2 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
-                  </svg>
-                  {feature}
-                </li>
-              ))}
-            </ul>
-          </div>
-          
-          <div className="flex justify-between items-center mt-auto">
-            <span className="text-white font-bold text-xl">{product.price}</span>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-medium rounded-lg"
-            >
-              Get Now
-            </motion.button>
-          </div>
-        </div>
-      </BackgroundGradient>
-    </motion.div>
+    </div>
   );
 } 

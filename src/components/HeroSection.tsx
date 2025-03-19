@@ -10,7 +10,7 @@ import { Navbar } from "@/components/Navbar";
 import { useTranslation } from 'react-i18next';
 
 export function HeroSection() {
-  const { t } = useTranslation();
+  const { t, ready } = useTranslation();
 
   const words = [
     { text: t('hero.words.innovative') },
@@ -18,6 +18,40 @@ export function HeroSection() {
     { text: t('hero.words.seamless') },
     { text: t('hero.words.beautiful') },
   ];
+
+  if (!ready) {
+    return (
+      <div className="relative h-screen w-full bg-black flex flex-col items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 w-full h-full">
+          <SparklesCore
+            id="tsparticlesfullpage"
+            background="transparent"
+            minSize={0.6}
+            maxSize={1.2}
+            particleDensity={100}
+            className="w-full h-full"
+            particleColor="#FFFFFF"
+          />
+        </div>
+        <div className="relative z-10 w-full max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-12 px-6 py-12 mt-16">
+          <div className="flex-1 space-y-8">
+            <div className="animate-pulse bg-gray-700 h-16 w-48 rounded"></div>
+            <div className="h-20">
+              <div className="animate-pulse bg-gray-700 h-8 w-32 rounded"></div>
+            </div>
+            <div className="animate-pulse bg-gray-700 h-24 w-full max-w-xl rounded"></div>
+            <div className="flex gap-4 pt-4">
+              <div className="animate-pulse bg-gray-700 h-12 w-32 rounded-full"></div>
+              <div className="animate-pulse bg-gray-700 h-12 w-32 rounded-full"></div>
+            </div>
+          </div>
+          <div className="flex-1 flex justify-center items-center">
+            <div className="animate-pulse bg-gray-700 h-96 w-full max-w-sm rounded-[22px]"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-screen w-full bg-black flex flex-col items-center justify-center overflow-hidden">
