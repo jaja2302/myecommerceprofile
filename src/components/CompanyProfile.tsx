@@ -1,62 +1,155 @@
 "use client";
 
-import React from "react";
-import { motion } from "framer-motion";
-import { BackgroundBeams } from "@/components/ui/background-beams";
-import { useTranslation } from 'react-i18next';
+import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
+import { useState } from "react";
+import { BackgroundBeamsWithCollision } from "@/components/ui/background-beams-with-collision";
 
 export function CompanyProfile() {
-  const { t } = useTranslation();
+  const items = [
+    {
+      title: "Frontend Development",
+      description: "Expert in React, Next.js, React Native, and Flutter. Building responsive and user-friendly interfaces for web and mobile applications.",
+    },
+    {
+      title: "Backend Development",
+      description: "Proficient in Node.js, Python, PHP, and Dart. Creating robust server-side solutions and APIs for seamless functionality.",
+    },
+    {
+      title: "Database Management",
+      description: "Skilled in MySQL, MongoDB, PostgreSQL, and SQLite. Designing efficient database structures for optimal performance.",
+    },
+    {
+      title: "UI/UX Design",
+      description: "Creating beautiful, intuitive user interfaces and experiences that engage users and enhance usability across platforms.",
+    },
+    {
+      title: "Business Automation",
+      description: "Streamlining business processes through custom software solutions that increase efficiency and productivity.",
+    },
+    {
+      title: "24/7 Support",
+      description: "Providing continuous technical support to ensure your applications run smoothly and issues are resolved promptly.",
+    },
+  ];
   
   return (
-    <div className="relative h-[100vh] w-full bg-neutral-950 flex flex-col items-center justify-center antialiased">
-      <div className="max-w-2xl mx-auto p-4">
-        <h1 className="relative z-10 text-5xl md:text-7xl bg-clip-text text-transparent bg-gradient-to-b from-neutral-200 to-neutral-600 text-center font-sans font-bold">
-          About Me
-        </h1>
-        <p className="text-neutral-300 max-w-lg mx-auto my-8 text-lg relative z-10 text-center">
+    <BackgroundBeamsWithCollision className="min-h-screen py-24">
+      <div className="max-w-7xl mx-auto p-4 z-10 relative">
+        <p className="text-neutral-300 max-w-2xl mx-auto my-8 text-lg text-center">
           I'm a passionate full-stack developer with expertise in web and mobile development. 
           Specializing in creating modern, efficient, and user-friendly applications.
         </p>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-          <div className="bg-black/30 backdrop-blur-sm p-6 rounded-lg">
-            <h3 className="text-xl font-semibold text-purple-400 mb-4">Skills</h3>
-            <ul className="space-y-2 text-neutral-300">
-              <li>• Frontend: React, Next.js, React Native</li>
-              <li>• Backend: Node.js, Python, Laravel</li>
-              <li>• Database: MySQL, MongoDB, PostgreSQL</li>
-              <li>• UI/UX Design & Development</li>
-            </ul>
-          </div>
-          
-          <div className="bg-black/30 backdrop-blur-sm p-6 rounded-lg">
-            <h3 className="text-xl font-semibold text-purple-400 mb-4">Experience</h3>
-            <ul className="space-y-2 text-neutral-300">
-              <li>• 5+ years in Full-stack Development</li>
-              <li>• 10+ Successful App Launches</li>
-              <li>• Mobile & Web App Development</li>
-              <li>• E-commerce Solutions</li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
-          <div className="bg-black/30 backdrop-blur-sm p-4 rounded-lg text-center">
-            <h4 className="text-2xl font-bold text-purple-400">15+</h4>
-            <p className="text-neutral-300">Projects Completed</p>
-          </div>
-          <div className="bg-black/30 backdrop-blur-sm p-4 rounded-lg text-center">
-            <h4 className="text-2xl font-bold text-purple-400">100%</h4>
-            <p className="text-neutral-300">Client Satisfaction</p>
-          </div>
-          <div className="bg-black/30 backdrop-blur-sm p-4 rounded-lg text-center">
-            <h4 className="text-2xl font-bold text-purple-400">24/7</h4>
-            <p className="text-neutral-300">Support Available</p>
-          </div>
-        </div>
+        <HoverEffect items={items} />
       </div>
-      <BackgroundBeams />
+    </BackgroundBeamsWithCollision>
+  );
+}
+
+export const HoverEffect = ({
+  items,
+  className,
+}: {
+  items: {
+    title: string;
+    description: string;
+  }[];
+  className?: string;
+}) => {
+  let [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 py-10",
+        className
+      )}
+    >
+      {items.map((item, idx) => (
+        <div
+          key={`card-${idx}-${item.title}`}
+          className="relative group block p-2 h-full w-full cursor-pointer"
+          onMouseEnter={() => setHoveredIndex(idx)}
+          onMouseLeave={() => setHoveredIndex(null)}
+        >
+          <AnimatePresence>
+            {hoveredIndex === idx && (
+              <motion.span
+                className="absolute inset-0 h-full w-full bg-neutral-200 dark:bg-slate-800/[0.8] block rounded-3xl"
+                layoutId="hoverBackground"
+                initial={{ opacity: 0 }}
+                animate={{
+                  opacity: 1,
+                  transition: { duration: 0.15 },
+                }}
+                exit={{
+                  opacity: 0,
+                  transition: { duration: 0.15, delay: 0.2 },
+                }}
+              />
+            )}
+          </AnimatePresence>
+          <Card>
+            <CardTitle>{item.title}</CardTitle>
+            <CardDescription>{item.description}</CardDescription>
+          </Card>
+        </div>
+      ))}
     </div>
   );
-} 
+};
+
+export const Card = ({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) => {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl h-full w-full p-4 overflow-hidden bg-black border border-transparent dark:border-white/[0.2] group-hover:border-slate-700 relative z-20",
+        className
+      )}
+    >
+      <div className="relative z-50">
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
+  );
+};
+
+export const CardTitle = ({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) => {
+  return (
+    <h4 className={cn("text-zinc-100 font-bold tracking-wide mt-4", className)}>
+      {children}
+    </h4>
+  );
+};
+
+export const CardDescription = ({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) => {
+  return (
+    <p
+      className={cn(
+        "mt-8 text-zinc-400 tracking-wide leading-relaxed text-sm",
+        className
+      )}
+    >
+      {children}
+    </p>
+  );
+}; 

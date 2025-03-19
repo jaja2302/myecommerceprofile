@@ -7,28 +7,28 @@ import { CardBody, CardContainer, CardItem } from "@/components/ui/3d-card";
 
 const apps = [
   {
-    title: "E-commerce App",
-    description: "Complete online store solution with admin dashboard",
-    image: "/ecommerce-app.png",
-    price: "$99",
+    title: "Trading Bot",
+    description: "Automated trading bot for Okx with 95% accuracy",
+    image: "/img/image.png",
+    price: "$500",
     link: "#",
-    tags: ["React Native", "Node.js", "MongoDB"]
+    tags: ["python", "CCXT", "SQLite"]
   },
   {
-    title: "Task Manager Pro",
-    description: "Advanced task management for teams",
-    image: "/task-manager.png",
-    price: "$49",
+    title: "Media Content FB BOT",
+    description: "Automated media content creation for Facebook using whatsapp",
+    image: "/img/fb.webp",
+    price: "$100",
     link: "#",
-    tags: ["React", "Firebase", "Material UI"]
+    tags: ["nodejs", "Whatsapp API", "SQLite"]
   },
   {
-    title: "Social Media Dashboard",
-    description: "Analytics and management platform",
-    image: "/social-dashboard.png",
-    price: "$79",
+    title: "Automatic Airdrop Bot",
+    description: "Automatic airdrop bot for telegram groups",
+    image: "/img/airdrop.webp",
+    price: "$100",
     link: "#",
-    tags: ["Next.js", "TypeScript", "Tailwind"]
+    tags: ["python", "Telegram API", "SQLite"]
   }
 ];
 

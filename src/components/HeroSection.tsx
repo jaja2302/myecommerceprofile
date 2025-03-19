@@ -112,7 +112,7 @@ export function HeroSection() {
             <BackgroundGradient className="rounded-[22px] max-w-sm p-4 bg-black/50 backdrop-blur-sm">
               <div className="bg-black/70 p-2 rounded-[20px] h-full">
                 <img 
-                  src="/app-screenshot.png" 
+                  src="/img/image.png" 
                   alt="Application Screenshot" 
                   className="rounded-[14px] w-full h-auto" 
                 />
