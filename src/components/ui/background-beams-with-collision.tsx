@@ -70,23 +70,28 @@ export const BackgroundBeamsWithCollision = ({
     <div
       ref={parentRef}
       className={cn(
-        "h-96 md:h-[40rem] bg-black dark:bg-black relative flex items-center w-full justify-center overflow-hidden",
+        "min-h-screen w-full bg-black dark:bg-black relative flex flex-col",
         className
       )}
     >
-      {beams.map((beam) => (
-        <CollisionMechanism
-          key={beam.initialX + "beam-idx"}
-          beamOptions={beam}
-          containerRef={containerRef}
-          parentRef={parentRef}
-        />
-      ))}
+      <div className="absolute inset-0 overflow-hidden">
+        {beams.map((beam) => (
+          <CollisionMechanism
+            key={beam.initialX + "beam-idx"}
+            beamOptions={beam}
+            containerRef={containerRef}
+            parentRef={parentRef}
+          />
+        ))}
+      </div>
 
-      {children}
+      <div className="relative z-10 flex-1 flex flex-col">
+        {children}
+      </div>
+
       <div
         ref={containerRef}
-        className="absolute bottom-0 bg-black w-full inset-x-0 pointer-events-none"
+        className="absolute bottom-0 bg-black w-full inset-x-0 pointer-events-none h-24"
         style={{
           boxShadow:
             "0 0 24px rgba(34, 42, 53, 0.06), 0 1px 1px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(34, 42, 53, 0.04), 0 0 4px rgba(34, 42, 53, 0.08), 0 16px 68px rgba(47, 48, 55, 0.05), 0 1px 0 rgba(255, 255, 255, 0.1) inset",

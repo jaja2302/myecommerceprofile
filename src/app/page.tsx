@@ -23,24 +23,30 @@ const testimonials = [
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-black">
+    <main className="min-h-screen bg-black overflow-x-hidden">
       <Navbar />
       <HeroSection />
       
-      <section id="about" className="py-20">
+      <section id="about">
         <CompanyProfile />
       </section>
       
-      <section id="products" className="py-20">
-        <ProductList />
+      <section id="products" className="py-12 sm:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <ProductList />
+        </div>
       </section>
       
-      <section id="testimonials" className="py-20">
-        <AnimatedTestimonials testimonials={testimonials} />
+      <section id="testimonials" className="py-12 sm:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <AnimatedTestimonials testimonials={testimonials} />
+        </div>
       </section>
       
-      <section id="contact" className="py-20">
-        <ContactSection />
+      <section id="contact" className="py-12 sm:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <ContactSection />
+        </div>
       </section>
       
       <Footer />
