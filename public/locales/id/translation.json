@@ -1,0 +1,27 @@
+{
+    "nav": {
+        "about": "Tentang",
+        "products": "Produk",
+        "testimonials": "Testimoni",
+        "contact": "Kontak",
+        "download": "Unduh"
+    },
+    "hero": {
+        "title": "Digita",
+        "words": {
+            "innovative": "Inovatif.",
+            "powerful": "Bertenaga.",
+            "seamless": "Mulus.",
+            "beautiful": "Indah."
+        },
+        "description": "Rasakan performa yang mulus, desain yang memukau, dan fitur-fitur canggih dalam aplikasi mutakhir kami.",
+        "buttons": {
+            "getStarted": "Mulai",
+            "learnMore": "Pelajari Lebih"
+        },
+        "appCard": {
+            "title": "Nama Aplikasi Anda",
+            "subtitle": "Solusi terbaik untuk kebutuhan Anda"
+        }
+    }
+}
