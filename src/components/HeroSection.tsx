@@ -2,7 +2,6 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { cn } from "@/utils/cn";
 import { BackgroundGradient } from "@/components/ui/background-gradient";
 import { SparklesCore } from "@/components/ui/sparkles";
 import { TypewriterEffect } from "@/components/ui/typewriter-effect";
