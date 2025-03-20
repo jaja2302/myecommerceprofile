@@ -12,36 +12,66 @@ const techStack = [
   {
     name: "PHP",
     icon: "/img/php.svg",
-    color: "#8892BF"
+    color: "#8892BF",
+    orbit: {
+      radius: 50,
+      speed: 15,
+      inclination: 5,
+      startPosition: 0
+    }
   },
   {
     name: "JavaScript",
     icon: "/img/javascript.svg",
-    color: "#F7DF1E"
+    color: "#F7DF1E",
+    orbit: {
+      radius: 75,
+      speed: 20,
+      inclination: -3,
+      startPosition: 72
+    }
   },
   {
     name: "Node.js",
     icon: "/img/nodejs.svg",
-    color: "#339933"
+    color: "#339933",
+    orbit: {
+      radius: 100,
+      speed: 25,
+      inclination: 7,
+      startPosition: 144
+    }
   },
   {
     name: "MySQL",
     icon: "/img/mysql.svg",
-    color: "#4479A1"
+    color: "#4479A1",
+    orbit: {
+      radius: 125,
+      speed: 30,
+      inclination: -4,
+      startPosition: 216
+    }
   },
   {
     name: "SQLite",
     icon: "/img/sqlite.svg",
-    color: "#003B57"
+    color: "#003B57",
+    orbit: {
+      radius: 150,
+      speed: 35,
+      inclination: 6,
+      startPosition: 288
+    }
   }
 ];
 
 export function TechStack() {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const [focusedTech, setFocusedTech] = useState<number | null>(null);
-  const [showBackButton, setShowBackButton] = useState(false);
-  
+  const [selectedTech, setSelectedTech] = useState<number | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
+
   // Define addToRefs function here, before the useEffect
   const addToRefs = (el: HTMLDivElement | null, index: number) => {
     if (el && !textRefs.current.includes(el)) {
@@ -67,33 +97,26 @@ export function TechStack() {
     }
   }, []);
 
-  // Handle returning from focused view
-  const handleBackClick = () => {
-    setFocusedTech(null);
-    setShowBackButton(false);
+  const handleTechClick = (index: number) => {
+    setSelectedTech(index);
+    setIsZoomed(true);
   };
 
   // Extract colors for Three.js background
   const techColors = techStack.map(tech => tech.color);
-
-  // Handle clicking on an orbit
-  const handleOrbitClick = (index: number) => {
-    setFocusedTech(index);
-    setShowBackButton(true);
-  };
 
   return (
     <div className="py-16 relative" ref={containerRef}>
       {/* Make the ThreeBackground interactive with onClick */}
       <ThreeBackground 
         colors={techColors} 
-        focusedTech={focusedTech}
+        focusedTech={selectedTech}
         onFocusComplete={() => {}} 
-        onOrbitClick={handleOrbitClick}
+        onOrbitClick={handleTechClick}
       />
       
       {/* Alternative orbit visualization for fallback */}
-      {focusedTech === null && (
+      {selectedTech === null && (
         
         <div className="relative z-10 opacity-70 pointer-events-none">
             <div className="text-center mb-16 relative z-10">
@@ -117,7 +140,8 @@ export function TechStack() {
             <span className="block mt-2 text-sm text-gray-500">Click on any planet to explore its orbit.</span>
           </motion.p>
         </div>
-          <TechOrbital techStack={techStack} />
+          <TechOrbital 
+            techStack={techStack} />
         </div>
       )}
       

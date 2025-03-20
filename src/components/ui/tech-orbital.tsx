@@ -10,6 +10,12 @@ interface TechOrbitalProps {
     name: string;
     icon: string;
     color: string;
+    orbit: {
+      radius: number;
+      speed: number;
+      inclination: number;
+      startPosition: number;
+    };
   }[];
 }
 
@@ -19,14 +25,6 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
   
   useEffect(() => {
     if (!orbitRef.current) return;
-    
-    // Create orbital rotation animation
-    gsap.to(orbitRef.current, {
-      rotateZ: 360,
-      duration: 20,
-      ease: "linear",
-      repeat: -1
-    });
     
     // Create mouse parallax effect
     const handleMouseMove = (e: MouseEvent) => {
@@ -62,70 +60,99 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
       className="w-full h-96 relative flex items-center justify-center perspective-1000"
       style={{ transformStyle: "preserve-3d" }}
     >
-      {/* Center sphere */}
+      {/* Center sphere (Sun) */}
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ duration: 1, delay: 0.2 }}
-        className="w-20 h-20 rounded-full bg-gray-800 absolute z-10 flex items-center justify-center"
-        style={{ boxShadow: "0 0 40px rgba(255, 255, 255, 0.1)" }}
+        className="w-24 h-24 rounded-full bg-yellow-500 absolute z-10 flex items-center justify-center"
+        style={{ boxShadow: "0 0 60px rgba(255, 196, 0, 0.3)" }}
       >
-        <span className="text-white font-bold">TECH</span>
+        <span className="text-gray-900 font-bold">TECH</span>
       </motion.div>
       
-      {/* Orbital path */}
+      {/* Orbital paths */}
       <div 
         ref={orbitRef}
         className="absolute w-full h-full preserve-3d"
       >
-        {/* Tech icons in orbit */}
         {techStack.map((tech, index) => {
+          // Memberikan radius orbit yang berbeda untuk setiap tech
+          const radius = 120 + (index * 40); // Jarak antar orbit 40px
+          const speed = 20 + (index * 5); // Kecepatan orbit berbeda
           const angle = (index / techStack.length) * Math.PI * 2;
-          const radius = 180; // Orbit radius
           
           // Calculate 3D position on the orbit
           const x = Math.sin(angle) * radius;
           const z = Math.cos(angle) * radius;
           
+          // Animasi orbit individual
+          useEffect(() => {
+            if (!orbitRef.current) return;
+            gsap.to(`#tech-${index}`, {
+              rotateZ: 360,
+              duration: speed,
+              ease: "linear",
+              repeat: -1,
+              transformOrigin: "center center"
+            });
+          }, []);
+
           return (
-            <motion.div
-              key={tech.name}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1, delay: 0.1 * index }}
-              className="absolute left-1/2 top-1/2 w-16 h-16 flex items-center justify-center"
-              style={{ 
-                transform: `translate(-50%, -50%) translate3d(${x}px, 0, ${z}px)`,
-                zIndex: z < 0 ? 0 : 20
-              }}
-            >
-              <div 
-                className="w-12 h-12 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: `${tech.color}20`, boxShadow: `0 0 20px ${tech.color}40` }}
-              >
-                <div className="relative w-8 h-8">
-                  <Image
-                    src={tech.icon}
-                    alt={tech.name}
-                    fill
-                    className="object-contain"
-                  />
-                </div>
-              </div>
-              
-              {/* Tech name tooltip */}
-              <div 
-                className="absolute top-full mt-1 px-2 py-1 rounded text-xs font-bold"
+            <div key={tech.name} id={`tech-${index}`} className="absolute w-full h-full">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 1, delay: 0.1 * index }}
+                className="absolute left-1/2 top-1/2 w-16 h-16 flex items-center justify-center"
                 style={{ 
-                  backgroundColor: tech.color,
-                  color: '#000',
-                  opacity: z > 0 ? 1 : 0.3,
-                  transform: `scale(${z > 0 ? 1 : 0.8})`
+                  transform: `translate(-50%, -50%) translate3d(${x}px, 0, ${z}px)`,
+                  zIndex: z < 0 ? 0 : 20
                 }}
               >
-                {tech.name}
-              </div>
-            </motion.div>
+                {/* Tech planet */}
+                <div 
+                  className="w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{ 
+                    backgroundColor: `${tech.color}20`, 
+                    boxShadow: `0 0 20px ${tech.color}40`,
+                    transform: `scale(${1 - index * 0.1})` // Ukuran planet mengecil
+                  }}
+                >
+                  <div className="relative w-8 h-8">
+                    <Image
+                      src={tech.icon}
+                      alt={tech.name}
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                </div>
+                
+                {/* Orbit path visualization */}
+                <div 
+                  className="absolute left-1/2 top-1/2 rounded-full border border-gray-600 opacity-20"
+                  style={{
+                    width: radius * 2,
+                    height: radius * 2,
+                    transform: 'translate(-50%, -50%)'
+                  }}
+                />
+
+                {/* Tech name tooltip */}
+                <div 
+                  className="absolute top-full mt-1 px-2 py-1 rounded text-xs font-bold"
+                  style={{ 
+                    backgroundColor: tech.color,
+                    color: '#000',
+                    opacity: z > 0 ? 1 : 0.3,
+                    transform: `scale(${z > 0 ? 1 : 0.8})`
+                  }}
+                >
+                  {tech.name}
+                </div>
+              </motion.div>
+            </div>
           );
         })}
       </div>
