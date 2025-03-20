@@ -258,13 +258,6 @@ export function TechStack() {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // Define addToRefs function here, before the useEffect
-  const addToRefs = (el: HTMLDivElement | null, index: number) => {
-    if (el && !textRefs.current.includes(el)) {
-      textRefs.current[index] = el;
-    }
-  };
-  
   useEffect(() => {
     // GSAP animation for floating text
     if (textRefs.current.length > 0) {

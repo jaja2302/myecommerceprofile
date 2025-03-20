@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
@@ -24,7 +24,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
   const orbitRefs = useRef<(THREE.Group | null)[]>([]);
   const planetRefs = useRef<(THREE.Mesh | null)[]>([]);
   const hyperSpaceRef = useRef<THREE.Group>(null);
-  const { camera, raycaster, gl, scene } = useThree();
+  const { camera, raycaster, gl } = useThree();
   const [isAnimating, setIsAnimating] = useState(false);
   const [showHyperspace, setShowHyperspace] = useState(false);
   const [pointer] = useState(new THREE.Vector2());
@@ -205,8 +205,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
     });
   };
 
-  // Create hyperspace effect
-  const createHyperSpace = () => {
+  const createHyperSpace = useCallback(() => {
     if (!hyperSpaceRef.current) return;
     
     // Clear existing children
@@ -245,18 +244,14 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
       
       hyperSpaceRef.current.add(line);
     }
-  };
+  }, [focusedTech, threeColors]);
 
-  // Handle focusing on a specific orbit
+  // Create hyperspace effect
   useEffect(() => {
     if (focusedTech !== null && orbitRefs.current[focusedTech]) {
       const targetOrbit = orbitRefs.current[focusedTech];
       if (targetOrbit) {
         setIsAnimating(true);
-        
-        // Get orbit position
-        const orbitPosition = new THREE.Vector3();
-        targetOrbit.getWorldPosition(orbitPosition);
         
         // Show hyperspace effect during travel
         setShowHyperspace(true);
@@ -264,12 +259,12 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
         
         // Calculate camera position for viewing the orbit
         const orbitData = orbits[focusedTech];
-        const cameraTarget = orbitPosition.clone().add(new THREE.Vector3(0, 0, 5));
+        const cameraTarget = orbitData.position.clone().add(new THREE.Vector3(0, 0, 5));
         
         // Animate camera movement with travel effect
         const startPos = camera.position.clone();
         const duration = 3.0;
-        let startTime = Date.now();
+        const startTime = Date.now();
         
         const animateCamera = () => {
           const elapsed = (Date.now() - startTime) / 1000;
@@ -302,7 +297,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
             }
           }
           
-          camera.lookAt(orbitPosition);
+          camera.lookAt(orbitData.position);
           
           if (progress < 1) {
             requestAnimationFrame(animateCamera);
@@ -324,7 +319,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
       }
     } else if (focusedTech === null) {
       // Reset all orbits to visible
-      orbitRefs.current.forEach((orbit, index) => {
+      orbitRefs.current.forEach((orbit) => {
         if (orbit) {
           gsap.to(orbit.scale, {
             x: 1, y: 1, z: 1,
@@ -367,7 +362,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
       setShowHyperspace(false);
       setIsAnimating(false);
     }
-  }, [focusedTech, camera, onFocusComplete]);
+  }, [focusedTech, camera, onFocusComplete, orbits, showHyperspace, createHyperSpace]);
 
   return (
     <>
@@ -625,7 +620,6 @@ export function ThreeBackground({ colors, focusedTech = null, onFocusComplete, o
         {focusedTech !== null && (
           <CameraShake 
             intensity={focusedTech !== null ? 1 : 0.5} 
-            decayRate={0.65}
             maxYaw={0.05}
             maxPitch={0.05}
             maxRoll={0.05}
@@ -654,7 +648,6 @@ export function ThreeBackground({ colors, focusedTech = null, onFocusComplete, o
 // Camera shake effect component
 interface CameraShakeProps {
   intensity: number;
-  decayRate: number;
   maxYaw: number;
   maxPitch: number;
   maxRoll: number;
@@ -665,7 +658,6 @@ interface CameraShakeProps {
 
 function CameraShake({
   intensity = 1,
-  decayRate = 0.65,
   maxYaw = 0.1,
   maxPitch = 0.1,
   maxRoll = 0.1,
@@ -680,7 +672,7 @@ function CameraShake({
     initialRotation.current.copy(camera.rotation);
   }, [camera]);
   
-  useFrame((_, delta) => {
+  useFrame(() => {
     if (intensity === 0) return;
     
     // Calculate random rotational offsets based on frequency

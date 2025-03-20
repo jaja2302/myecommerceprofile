@@ -68,6 +68,19 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
     
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    techStack.forEach((tech, index) => {
+      if (!orbitRef.current) return;
+      gsap.to(`#tech-${index}`, {
+        rotateZ: 360,
+        duration: tech.orbit.speed,
+        ease: "linear",
+        repeat: -1,
+        transformOrigin: "center center"
+      });
+    });
+  }, [techStack]);
   
   return (
     <div 
@@ -114,27 +127,13 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
         className="absolute w-full h-full preserve-3d"
       >
         {techStack.map((tech, index) => {
-          // Menggunakan radius dari konfigurasi orbit
           const radius = tech.orbit.radius;
-          const speed = tech.orbit.speed;
           const angle = (index / techStack.length) * Math.PI * 2;
           
           // Calculate 3D position on the orbit
           const x = Math.sin(angle) * radius;
           const z = Math.cos(angle) * radius;
           
-          // Animasi orbit individual
-          useEffect(() => {
-            if (!orbitRef.current) return;
-            gsap.to(`#tech-${index}`, {
-              rotateZ: 360,
-              duration: speed,
-              ease: "linear",
-              repeat: -1,
-              transformOrigin: "center center"
-            });
-          }, []);
-
           const isHovered = hoveredTech === index;
 
           return (
@@ -243,7 +242,6 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
       {/* Interactive particle effects */}
       <div className="absolute inset-0 overflow-hidden">
         {Array.from({ length: 50 }).map((_, i) => {
-          const speed = 2 + Math.random() * 4;
           const size = Math.random() * 3 + 1;
           const delay = Math.random() * 5;
           const techIndex = i % techStack.length;
@@ -265,7 +263,7 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
                 scale: [0, isHighlighted ? Math.random() * 0.8 + 0.7 : Math.random() * 0.5 + 0.5, 0]
               }}
               transition={{
-                duration: isHighlighted ? speed * 0.8 : speed,
+                duration: isHighlighted ? 0.8 : 1,
                 repeat: Infinity,
                 delay: delay,
                 ease: "easeInOut"
