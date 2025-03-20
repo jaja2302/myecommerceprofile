@@ -21,6 +21,12 @@ module.exports = {
           },
         },
       },
+      perspective: {
+        none: 'none',
+        '500': '500px',
+        '1000': '1000px',
+        '2000': '2000px',
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],
