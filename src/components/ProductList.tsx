@@ -28,7 +28,8 @@ const apps = [
     image: "/img/airdrop.webp",
     price: "$100",
     link: "#",
-    tags: ["python", "Telegram API", "SQLite"]
+    tags: ["python", "Telegram API", "SQLite"],
+    isPriority: true
   }
 ];
 
@@ -61,6 +62,7 @@ export function ProductList() {
                     height={200}
                     width={400}
                     className="h-52 w-full object-cover rounded-xl group-hover/card:shadow-xl"
+                    priority={app.isPriority}
                   />
                 </CardItem>
                 

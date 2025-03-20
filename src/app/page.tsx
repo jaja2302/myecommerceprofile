@@ -5,6 +5,7 @@ import { ContactSection } from "@/components/ContactSection";
 import { Footer } from "@/components/Footer";
 import { Navbar } from "@/components/Navbar";
 import { AnimatedTestimonials } from "@/components/AnimatedTestimonials";
+import { TechStack } from "@/components/TechStack";
 
 const testimonials = [
   {
@@ -35,6 +36,23 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <ProductList />
         </div>
+      </section>
+
+      <section id="tech-stack" className="py-12 sm:py-20">
+        <div className="relative">
+          <h2 className="tech-title text-4xl md:text-6xl font-bold text-center mb-12">
+            <span className="bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+              Tech Stack
+            </span>
+          </h2>
+          {/* Glow effect */}
+          <div className="absolute inset-0 blur-2xl opacity-50 bg-gradient-to-r from-purple-500 to-pink-500" style={{ filter: 'blur(40px)' }} />
+        </div>
+
+        <div className="w-full px-4 sm:px-6">
+          <TechStack />
+        </div>
+
       </section>
       
       <section id="testimonials" className="py-12 sm:py-20">
