@@ -28,6 +28,8 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
   const [isAnimating, setIsAnimating] = useState(false);
   const [showHyperspace, setShowHyperspace] = useState(false);
   const [pointer] = useState(new THREE.Vector2());
+  const [hoveredPlanet, setHoveredPlanet] = useState<number | null>(null);
+  const [mousePosition, setMousePosition] = useState(new THREE.Vector2());
   
   // Define orbit positions and properties
   const orbits = colors.map((_, i) => {
@@ -51,6 +53,49 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
   
   // Convert string colors to THREE.Color objects
   const threeColors = colors.map(color => new THREE.Color(color));
+
+  // Track mouse position for planet hover effects
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      setMousePosition(new THREE.Vector2(x, y));
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [gl]);
+  
+  // Check for planet hovering
+  useFrame(({ camera }) => {
+    // Skip ray-casting if animation is in progress
+    if (isAnimating || focusedTech !== null) return;
+    
+    raycaster.setFromCamera(mousePosition, camera);
+    
+    let foundIntersection = false;
+    let closestPlanet: number | null = null;
+    let closestDistance = Infinity;
+    
+    planetRefs.current.forEach((planet, index) => {
+      if (planet) {
+        const intersects = raycaster.intersectObject(planet, true);
+        if (intersects.length > 0 && intersects[0].distance < closestDistance) {
+          closestDistance = intersects[0].distance;
+          closestPlanet = index;
+          foundIntersection = true;
+        }
+      }
+    });
+    
+    if (foundIntersection) {
+      setHoveredPlanet(closestPlanet);
+    } else {
+      setHoveredPlanet(null);
+    }
+  });
   
   useFrame((_state, delta) => {
     // Central orbital system rotation
@@ -66,9 +111,33 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
         if (focusedTech === index) {
           orbitGroup.rotation.y += delta * orbits[index].speed * 2;
         } 
+        // If this orbit is hovered, speed up rotation slightly
+        else if (hoveredPlanet === index && focusedTech === null) {
+          orbitGroup.rotation.y += delta * orbits[index].speed * 1.5;
+        }
         // Otherwise rotate the orbit slightly if it's visible
         else if (focusedTech === null) {
           orbitGroup.rotation.y += delta * orbits[index].speed;
+        }
+        
+        // Planet pulse effect on hover
+        const planet = planetRefs.current[index];
+        if (planet && hoveredPlanet === index) {
+          // Apply pulsating scale to the hovered planet
+          const pulseScale = 1 + Math.sin(Date.now() * 0.005) * 0.1;
+          planet.scale.set(pulseScale, pulseScale, pulseScale);
+          
+          // Increase emissive intensity on hover
+          if (planet.material instanceof THREE.MeshStandardMaterial) {
+            planet.material.emissiveIntensity = 1.5 + Math.sin(Date.now() * 0.003) * 0.5;
+          }
+        } else if (planet && hoveredPlanet !== index) {
+          // Reset scale and emissive intensity when not hovered
+          planet.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
+          
+          if (planet.material instanceof THREE.MeshStandardMaterial) {
+            planet.material.emissiveIntensity = 1.0;
+          }
         }
       }
     });
@@ -194,7 +263,6 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
         createHyperSpace();
         
         // Calculate camera position for viewing the orbit
-        // Position slightly offset from orbit center to get a good view
         const orbitData = orbits[focusedTech];
         const cameraTarget = orbitPosition.clone().add(new THREE.Vector3(0, 0, 5));
         
@@ -212,40 +280,28 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
             // Phase 1: Initial acceleration
             const p = progress / 0.4;
             const easeInQuad = p * p;
-            
-            // Move slightly away from center first
             const zoomOutPos = startPos.clone().multiplyScalar(1.2);
             camera.position.lerpVectors(startPos, zoomOutPos, easeInQuad);
-            
           } else if (progress < 0.8) {
             // Phase 2: Hyperspace travel
             const p = (progress - 0.4) / 0.4;
             const hyperPos = startPos.clone().multiplyScalar(1.2).lerp(cameraTarget, p * 0.6);
-            
-            // Add wild shake during hyperspace
             const shake = Math.sin(p * Math.PI * 20) * 0.15 * (1 - p);
             const shakeY = Math.cos(p * Math.PI * 15) * 0.15 * (1 - p);
-            
             camera.position.copy(hyperPos);
             camera.position.x += shake;
             camera.position.y += shakeY;
-            
           } else {
             // Phase 3: Deceleration and arrival
             const p = (progress - 0.8) / 0.2;
             const easeOutQuad = 1 - (1 - p) * (1 - p);
-            
-            // Smoothly arrive at destination
             const arrivalPos = startPos.clone().multiplyScalar(1.2).lerp(cameraTarget, 0.6);
             camera.position.lerpVectors(arrivalPos, cameraTarget, easeOutQuad);
-            
-            // Reduce hyperspace effect
             if (progress > 0.9 && showHyperspace) {
               setShowHyperspace(false);
             }
           }
           
-          // Always look at the orbit
           camera.lookAt(orbitPosition);
           
           if (progress < 1) {
@@ -256,10 +312,6 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
           }
         };
         
-        // We no longer need to hide other orbits with scaling as we use the visible prop
-        // Other orbits visibility is controlled by the visible attribute in render
-        
-        // Hide center sphere
         if (meshRef.current) {
           gsap.to(meshRef.current.scale, { 
             x: 0.01, y: 0.01, z: 0.01, 
@@ -271,28 +323,49 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
         animateCamera();
       }
     } else if (focusedTech === null) {
-      // We don't need to reset orbit scales anymore as visibility is controlled by props
+      // Reset all orbits to visible
+      orbitRefs.current.forEach((orbit, index) => {
+        if (orbit) {
+          gsap.to(orbit.scale, {
+            x: 1, y: 1, z: 1,
+            duration: 1.0,
+            ease: "power2.out"
+          });
+        }
+      });
       
       // Reset center sphere
       if (meshRef.current) {
         gsap.to(meshRef.current.scale, { 
           x: 1, y: 1, z: 1, 
           duration: 1.0,
-          ease: "power2.out" 
+          ease: "power2.out",
+          onComplete: () => {
+            // Ensure all orbits are visible after animation
+            orbitRefs.current.forEach((orbit) => {
+              if (orbit) {
+                orbit.visible = true;
+              }
+            });
+          }
         });
       }
       
-      // Reset camera to original position
+      // Reset camera position with smooth animation
       gsap.to(camera.position, {
         x: 0,
         y: 0,
         z: 6,
         duration: 2.0,
-        ease: "power2.inOut"
+        ease: "power2.inOut",
+        onUpdate: () => {
+          camera.lookAt(0, 0, 0);
+        }
       });
       
       // Hide hyperspace effect
       setShowHyperspace(false);
+      setIsAnimating(false);
     }
   }, [focusedTech, camera, onFocusComplete]);
 
@@ -305,8 +378,8 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
       
       {/* Main galaxy group */}
       <group ref={groupRef} onClick={handleCanvasClick}>
-        {/* Central Sun */}
-        {focusedTech === null && (
+        {/* Central Sun with pulsating core */}
+        {!isAnimating && (
           <mesh ref={meshRef}>
             <sphereGeometry args={[0.7, 32, 32]} />
             <meshStandardMaterial
@@ -315,91 +388,171 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
               metalness={0.9}
               wireframe={true}
             />
+            {/* Inner glowing core */}
+            <mesh>
+              <sphereGeometry args={[0.5, 32, 32]} />
+              <meshStandardMaterial
+                color="#ff9900"
+                emissive="#ffaa00"
+                emissiveIntensity={1.5 + Math.sin(Date.now() * 0.001) * 0.5}
+                transparent={true}
+                opacity={0.8}
+              />
+            </mesh>
+            {/* Pulsating corona */}
+            <mesh>
+              <sphereGeometry args={[0.9, 24, 24]} />
+              <meshStandardMaterial
+                color="#ffaa00"
+                emissive="#ffff00"
+                emissiveIntensity={0.8}
+                transparent={true}
+                opacity={0.3}
+                wireframe={true}
+              />
+            </mesh>
           </mesh>
         )}
         
         {/* Create individual orbits for each tech */}
-        {orbits.map((orbit, i) => (
-          <group 
-            key={`orbit-${i}`}
-            position={orbit.position}
-            rotation={orbit.rotation}
-            ref={el => orbitRefs.current[i] = el}
-            visible={focusedTech === null || focusedTech === i}
-          >
-            {/* Orbit path */}
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[orbit.radius - 0.1, orbit.radius + 0.1, 64]} />
-              <meshBasicMaterial 
-                color={threeColors[i]} 
-                transparent={true} 
-                opacity={0.5} 
-                side={THREE.DoubleSide}
-              />
-            </mesh>
-            
-            {/* Planet */}
-            <mesh
-              ref={el => planetRefs.current[i] = el}
-              position={[orbit.radius, 0, 0]}
+        {orbits.map((orbit, i) => {
+          const isHovered = hoveredPlanet === i;
+          const isFocused = focusedTech === i;
+          
+          return (
+            <group 
+              key={`orbit-${i}`}
+              position={orbit.position}
+              rotation={orbit.rotation}
+              ref={el => orbitRefs.current[i] = el}
+              visible={!isAnimating || focusedTech === i || focusedTech === null}
             >
-              <sphereGeometry args={[0.6, 32, 32]} />
-              <meshStandardMaterial
-                color={threeColors[i]}
-                emissive={threeColors[i]}
-                emissiveIntensity={1.0}
-                roughness={0.2}
-                metalness={0.8}
-              />
+              {/* Enhanced orbit path with glow effect */}
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[orbit.radius - 0.1, orbit.radius + 0.1, 64]} />
+                <meshBasicMaterial 
+                  color={isHovered ? new THREE.Color(threeColors[i]).multiplyScalar(1.5) : threeColors[i]} 
+                  transparent={true} 
+                  opacity={isHovered ? 0.8 : 0.5} 
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
               
-              {/* Planet glow */}
-              <mesh scale={1.5}>
+              {/* Planet with enhanced effects */}
+              <mesh
+                ref={el => planetRefs.current[i] = el}
+                position={[orbit.radius, 0, 0]}
+              >
                 <sphereGeometry args={[0.6, 32, 32]} />
                 <meshStandardMaterial
                   color={threeColors[i]}
                   emissive={threeColors[i]}
-                  emissiveIntensity={1.5}
-                  transparent={true}
-                  opacity={0.3}
+                  emissiveIntensity={isHovered ? 1.5 : 1.0}
+                  roughness={0.2}
+                  metalness={0.8}
                 />
-              </mesh>
-              
-              {/* Moons */}
-              <mesh position={[0.8, 0.3, 0]} scale={0.15}>
-                <sphereGeometry args={[1, 16, 16]} />
-                <meshStandardMaterial color="#aaaaaa" roughness={0.8} />
-              </mesh>
-            </mesh>
-            
-            {/* Orbit dust particles */}
-            {Array.from({ length: 20 }).map((_, particleIndex) => {
-              const angle = (particleIndex / 20) * Math.PI * 2;
-              const jitter = (Math.random() - 0.5) * 0.2;
-              const rad = orbit.radius + jitter;
-              return (
-                <mesh
-                  key={`orbit-particle-${i}-${particleIndex}`}
-                  position={[
-                    Math.cos(angle) * rad,
-                    Math.sin(angle) * rad,
-                    (Math.random() - 0.5) * 0.2
-                  ]}
-                  scale={0.05 + Math.random() * 0.05}
-                >
-                  <sphereGeometry args={[1, 8, 8]} />
+                
+                {/* Atmospheric glow that intensifies on hover */}
+                <mesh scale={isHovered ? 1.7 : 1.5}>
+                  <sphereGeometry args={[0.6, 32, 32]} />
                   <meshStandardMaterial
                     color={threeColors[i]}
                     emissive={threeColors[i]}
-                    emissiveIntensity={2}
+                    emissiveIntensity={isHovered ? 2.0 : 1.5}
+                    transparent={true}
+                    opacity={isHovered ? 0.5 : 0.3}
                   />
                 </mesh>
-              );
-            })}
-          </group>
-        ))}
+                
+                {/* Planet rings for even-indexed planets */}
+                {i % 2 === 0 && (
+                  <mesh rotation={[Math.PI / 2 + 0.3, 0, 0]}>
+                    <ringGeometry args={[0.9, 1.2, 32]} />
+                    <meshBasicMaterial 
+                      color={threeColors[i]} 
+                      transparent={true} 
+                      opacity={0.6} 
+                      side={THREE.DoubleSide}
+                    />
+                  </mesh>
+                )}
+                
+                {/* Moons - more detailed and with unique orbits */}
+                {Array.from({ length: i % 3 + 1 }).map((_, moonIndex) => {
+                  const moonAngle = (Date.now() * 0.001 + moonIndex * Math.PI * 0.6) % (Math.PI * 2);
+                  const moonDistance = 0.8 + moonIndex * 0.2;
+                  const moonSize = 0.15 - moonIndex * 0.03;
+                  
+                  return (
+                    <mesh 
+                      key={`moon-${i}-${moonIndex}`}
+                      position={[
+                        Math.cos(moonAngle) * moonDistance,
+                        Math.sin(moonAngle) * moonDistance * 0.3,
+                        Math.sin(moonAngle) * moonDistance * 0.5
+                      ]} 
+                      scale={moonSize}
+                    >
+                      <sphereGeometry args={[1, 16, 16]} />
+                      <meshStandardMaterial 
+                        color="#aaaaaa" 
+                        roughness={0.8} 
+                        emissive={threeColors[i]}
+                        emissiveIntensity={0.3}
+                      />
+                    </mesh>
+                  );
+                })}
+              </mesh>
+              
+              {/* Orbit dust particles */}
+              {Array.from({ length: 20 }).map((_, particleIndex) => {
+                const angle = (particleIndex / 20) * Math.PI * 2;
+                const jitter = (Math.random() - 0.5) * 0.2;
+                const rad = orbit.radius + jitter;
+                return (
+                  <mesh
+                    key={`orbit-particle-${i}-${particleIndex}`}
+                    position={[
+                      Math.cos(angle) * rad,
+                      Math.sin(angle) * rad,
+                      (Math.random() - 0.5) * 0.2
+                    ]}
+                    scale={0.05 + Math.random() * 0.05}
+                  >
+                    <sphereGeometry args={[1, 8, 8]} />
+                    <meshStandardMaterial
+                      color={threeColors[i]}
+                      emissive={threeColors[i]}
+                      emissiveIntensity={isHovered ? 3 : 2}
+                    />
+                  </mesh>
+                );
+              })}
+              
+              {/* Tooltip that appears when planet is hovered */}
+              {isHovered && !isFocused && (
+                <mesh
+                  position={[orbit.radius, 1.2, 0]}
+                  scale={[1, 0.3, 0.1]}
+                  rotation={[0, 0, 0]}
+                >
+                  <planeGeometry args={[2, 1]} />
+                  <meshBasicMaterial
+                    color="#000000"
+                    transparent={true}
+                    opacity={0.7}
+                    side={THREE.DoubleSide}
+                  />
+                  {/* This would show text in three.js but we'd need to add a text component or texture */}
+                </mesh>
+              )}
+            </group>
+          );
+        })}
       </group>
       
-      {/* Background stars - more visible during hyperspace travel */}
+      {/* Enhanced background stars - more visible during hyperspace travel */}
       <Stars 
         radius={100} 
         depth={50} 
@@ -409,6 +562,51 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
         fade 
         speed={focusedTech !== null ? 2 : 0.5} 
       />
+      
+      {/* Interactive shooting stars */}
+      {focusedTech === null && Array.from({ length: 5 }).map((_, i) => {
+        // Generate random shooting star paths
+        const startX = (Math.random() - 0.5) * 100;
+        const startY = (Math.random() - 0.5) * 100;
+        const startZ = -50;
+        
+        const endX = startX + (Math.random() - 0.5) * 200;
+        const endY = startY + (Math.random() - 0.5) * 200;
+        const endZ = 100;
+        
+        // Create curve for path
+        const curve = new THREE.LineCurve3(
+          new THREE.Vector3(startX, startY, startZ),
+          new THREE.Vector3(endX, endY, endZ)
+        );
+        
+        return (
+          <mesh
+            key={`shooting-star-${i}`}
+            position={[
+              curve.getPoint((Date.now() * 0.0001 + i * 0.1) % 1).x,
+              curve.getPoint((Date.now() * 0.0001 + i * 0.1) % 1).y,
+              curve.getPoint((Date.now() * 0.0001 + i * 0.1) % 1).z
+            ]}
+          >
+            <sphereGeometry args={[0.2, 8, 8]} />
+            <meshBasicMaterial
+              color="#ffffff"
+              transparent={true}
+              opacity={0.8}
+            />
+            {/* Trail */}
+            <mesh position={[0, 0, -2]} scale={[1, 1, 10]}>
+              <cylinderGeometry args={[0.05, 0.2, 1, 8]} />
+              <meshBasicMaterial
+                color="#ffffff"
+                transparent={true}
+                opacity={0.3}
+              />
+            </mesh>
+          </mesh>
+        );
+      })}
     </>
   );
 }
@@ -423,6 +621,19 @@ export function ThreeBackground({ colors, focusedTech = null, onFocusComplete, o
         <ambientLight intensity={0.3} />
         <pointLight position={[10, 10, 10]} intensity={0.7} />
         <pointLight position={[-10, -10, -10]} intensity={0.2} />
+        {/* Add some interactivity with camera shake */}
+        {focusedTech !== null && (
+          <CameraShake 
+            intensity={focusedTech !== null ? 1 : 0.5} 
+            decayRate={0.65}
+            maxYaw={0.05}
+            maxPitch={0.05}
+            maxRoll={0.05}
+            yawFrequency={0.8}
+            pitchFrequency={0.8}
+            rollFrequency={0.8}
+          />
+        )}
         <Particles 
           colors={colors} 
           focusedTech={focusedTech} 
@@ -438,4 +649,52 @@ export function ThreeBackground({ colors, focusedTech = null, onFocusComplete, o
       </Canvas>
     </div>
   );
+}
+
+// Camera shake effect component
+interface CameraShakeProps {
+  intensity: number;
+  decayRate: number;
+  maxYaw: number;
+  maxPitch: number;
+  maxRoll: number;
+  yawFrequency: number;
+  pitchFrequency: number;
+  rollFrequency: number;
+}
+
+function CameraShake({
+  intensity = 1,
+  decayRate = 0.65,
+  maxYaw = 0.1,
+  maxPitch = 0.1,
+  maxRoll = 0.1,
+  yawFrequency = 0.1,
+  pitchFrequency = 0.1,
+  rollFrequency = 0.1
+}: CameraShakeProps) {
+  const { camera } = useThree();
+  const initialRotation = useRef(new THREE.Euler(0, 0, 0));
+  
+  useEffect(() => {
+    initialRotation.current.copy(camera.rotation);
+  }, [camera]);
+  
+  useFrame((_, delta) => {
+    if (intensity === 0) return;
+    
+    // Calculate random rotational offsets based on frequency
+    const yawOffset = Math.sin(Date.now() * 0.001 * yawFrequency) * maxYaw * intensity;
+    const pitchOffset = Math.sin(Date.now() * 0.001 * pitchFrequency) * maxPitch * intensity;
+    const rollOffset = Math.sin(Date.now() * 0.001 * rollFrequency) * maxRoll * intensity;
+    
+    // Apply to camera rotation
+    camera.rotation.set(
+      initialRotation.current.x + pitchOffset,
+      initialRotation.current.y + yawOffset,
+      initialRotation.current.z + rollOffset
+    );
+  });
+  
+  return null;
 } 

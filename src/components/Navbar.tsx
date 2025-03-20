@@ -59,6 +59,12 @@ export function Navbar() {
             {t('nav.products')}
           </button>
           <button 
+            onClick={() => handleScrollToSection("tech-stack")}
+            className="text-gray-300 hover:text-white transition-colors"
+          >
+            Tech Stack
+          </button>
+          <button 
             onClick={() => handleScrollToSection("testimonials")}
             className="text-gray-300 hover:text-white transition-colors"
           >
@@ -146,6 +152,12 @@ export function Navbar() {
               className="text-gray-300 hover:text-white transition-colors py-2"
             >
               {t('nav.products')}
+            </button>
+            <button 
+              onClick={() => handleScrollToSection("tech-stack")}
+              className="text-gray-300 hover:text-white transition-colors py-2"
+            >
+              Tech Stack
             </button>
             <button 
               onClick={() => handleScrollToSection("testimonials")}
