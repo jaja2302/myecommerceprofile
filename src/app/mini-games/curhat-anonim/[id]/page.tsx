@@ -84,7 +84,7 @@ export default function CurhatDetail() {
           view_count: increment(1)
         });
       } catch (error_) {
-        setError("Gagal memuat data");
+        setError("Gagal memuat data" + error_);
         // Continue even if view count update fails
       }
       
@@ -168,7 +168,7 @@ export default function CurhatDetail() {
       }
     } catch (error_) {
       // console.error("Error fetching comments:", error);
-      setError("Gagal memuat komentar");
+      setError("Gagal memuat komentar" + error_);
     }
   };
 
@@ -191,7 +191,7 @@ export default function CurhatDetail() {
         await fetchComments();
       } catch (error: Error | unknown) {
         // console.error("Error initializing page:", error);
-        setError("Terjadi kesalahan dalam memuat halaman");
+        setError("Terjadi kesalahan dalam memuat halaman" + error);
       } finally {
         setLoading(false);
       }
@@ -285,7 +285,7 @@ export default function CurhatDetail() {
           });
         }
       } catch (error_) {
-        setError("Gagal memuat data");
+        setError("Gagal memuat data" + error_);
         // Continue even if comment count update fails
       }
       
