@@ -8,7 +8,7 @@ import { signInAnonymously } from 'firebase/auth';
 import { collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, where, doc, updateDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import FilteringWords from '@/data/filteringWords';
-const { containsKataKasar, containsLink, containsKoordinat, containsAlamat } = FilteringWords;
+const { containsKataKasar, containsLink, containsKoordinat, containsAlamat, debugTextFilter } = FilteringWords;
 
 // Types for our data
 interface Curhat {
@@ -53,10 +53,10 @@ export default function CurhatAnonim() {
       try {
         const userCredential = await signInAnonymously(auth);
         setUserId(userCredential.user.uid);
-        console.log("Signed in anonymously with UID:", userCredential.user.uid);
+        // console.log("Signed in anonymously with UID:", userCredential.user.uid);
       } catch (error: Error | unknown) {
         const firebaseError = error as { code?: string; message: string };
-        console.error("Error signing in anonymously:", firebaseError.code, firebaseError.message);
+        // console.error("Error signing in anonymously:", firebaseError.code, firebaseError.message);
         setError(`Gagal masuk secara anonim: ${firebaseError.message}`);
       }
     };
@@ -92,9 +92,9 @@ export default function CurhatAnonim() {
         limit(20)
       );
       
-      console.log("Fetching curhatan...");
+      // console.log("Fetching curhatan...");
       const querySnapshot = await getDocs(curhatQuery);
-      console.log("Fetched curhatan:", querySnapshot.size);
+      // console.log("Fetched curhatan:", querySnapshot.size);
       
       const curhatan: Curhat[] = [];
       
@@ -113,7 +113,7 @@ export default function CurhatAnonim() {
       setCurhatList(curhatan);
     } catch (error: Error | unknown) {
       const firebaseError = error as { code?: string; message: string };
-      console.error("Error fetching curhatan:", firebaseError.code, firebaseError.message);
+      // console.error("Error fetching curhatan:", firebaseError.code, firebaseError.message);
       setError(`Gagal mengambil data: ${firebaseError.message}`);
     } finally {
       setLoading(false);
@@ -140,12 +140,12 @@ export default function CurhatAnonim() {
         limit(10)
       );
       
-      console.log("Fetching top weekly curhatan...");
+      // console.log("Fetching top weekly curhatan...");
       
       // Try-catch untuk handling jika index belum ada
       try {
         const querySnapshot = await getDocs(topQuery);
-        console.log("Fetched top curhatan:", querySnapshot.size);
+        // console.log("Fetched top curhatan:", querySnapshot.size);
         
         const topCurhatan: Curhat[] = [];
         
@@ -164,7 +164,7 @@ export default function CurhatAnonim() {
         // Jika index belum dibuat, gunakan fallback (tanpa filter week)
         const firebaseError = error as { message: string };
         if (firebaseError.message && firebaseError.message.includes('requires an index')) {
-          console.log("Index for top weekly query is being built, using simpler fallback query");
+          // console.log("Index for top weekly query is being built, using simpler fallback query");
           
           // Fallback query tanpa filter week
           const fallbackQuery = query(
@@ -204,35 +204,42 @@ export default function CurhatAnonim() {
   const handleSubmitCurhat = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Log message for debugging
+    // console.log("Validating message:", curhatText);
+    // console.log("Message length:", curhatText.trim().length);
+    
+    // Advanced debugging
+    const debugResult = debugTextFilter(curhatText);
+    // console.log("Debug filter result:", debugResult);
+    
     // Validasi
     if (curhatText.trim().length < 10) {
+      // console.log("Error: Minimum length not met");
       setError('Curhat minimal 10 karakter');
       return;
     }
     
     if (curhatText.trim().length > 300) {
+      // console.log("Error: Maximum length exceeded");
       setError('Curhat maksimal 300 karakter');
       return;
     }
     
-    if (containsKataKasar(curhatText)) {
-      setError('Tolong jaga bahasa kamu ya!');
-      return;
-    }
-    
-    // Validasi tambahan untuk keamanan
-    if (containsLink(curhatText)) {
-      setError('Dilarang menyertakan link atau URL dalam curhat');
-      return;
-    }
-    
-    if (containsKoordinat(curhatText)) {
-      setError('Dilarang menyertakan koordinat lokasi dalam curhat');
-      return;
-    }
-    
-    if (containsAlamat(curhatText)) {
-      setError('Dilarang menyertakan informasi alamat dalam curhat');
+    // Check for overall filtering result
+    if (debugResult.isFiltered) {
+      // console.log(`Filtering reason: ${debugResult.reason}, Match: ${debugResult.match}`);
+      
+      if (debugResult.reason.includes("Contains inappropriate word")) {
+        setError(`Tolong jaga bahasa kamu ya! Kata "${debugResult.match}" tidak diperbolehkan.`);
+      } else if (debugResult.reason.includes("Contains link")) {
+        setError(`Dilarang menyertakan link atau URL dalam curhat. Ditemukan: "${debugResult.match}"`);
+      } else if (debugResult.reason.includes("Contains address")) {
+        setError(`Dilarang menyertakan informasi alamat dalam curhat. Ditemukan: "${debugResult.match}"`);
+      } else if (debugResult.reason.includes("Contains coordinates")) {
+        setError(`Dilarang menyertakan koordinat lokasi dalam curhat. Ditemukan: "${debugResult.match}"`);
+      } else {
+        setError('Pesan tidak dapat dikirim karena melanggar aturan konten kami.');
+      }
       return;
     }
     
@@ -245,7 +252,7 @@ export default function CurhatAnonim() {
       setLoading(true);
       setError('');
       
-      console.log("Submitting curhat...");
+      // console.log("Submitting curhat...");
       
       // Tambahkan timestamp client-side sebagai fallback
       // dan tetap gunakan serverTimestamp untuk timestamp yang akurat
@@ -261,7 +268,7 @@ export default function CurhatAnonim() {
       
       // Simpan ke Firestore
       const docRef = await addDoc(collection(db, "curhatan"), curhatData);
-      console.log("Curhat added with ID:", docRef.id);
+      // console.log("Curhat added with ID:", docRef.id);
       
       // Reset form & tampilkan pesan sukses
       setCurhatText('');
@@ -286,7 +293,7 @@ export default function CurhatAnonim() {
   const fixCommentCounts = async () => {
     try {
       setFixingComments(true);
-      console.log("Checking and fixing comment counts for posts...");
+      // console.log("Checking and fixing comment counts for posts...");
       
       // Get all curhatan
       const curhatRef = collection(db, "curhatan");
@@ -309,16 +316,16 @@ export default function CurhatAnonim() {
           comment_count: commentCount
         });
         
-        console.log(`Updated comment count for curhat ${curhatId}: ${commentCount} comments`);
+        // console.log(`Updated comment count for curhat ${curhatId}: ${commentCount} comments`);
       }
       
-      console.log("Comment count fix completed");
+      // console.log("Comment count fix completed");
       
       // Refresh the lists after fixing
       await fetchCurhatan();
       await fetchTopWeeklyCurhatan();
     } catch (error) {
-      console.error("Error fixing comment counts:", error);
+      // console.error("Error fixing comment counts:", error);
     } finally {
       setFixingComments(false);
     }

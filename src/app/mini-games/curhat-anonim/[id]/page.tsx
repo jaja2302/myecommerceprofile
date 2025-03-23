@@ -83,9 +83,9 @@ export default function CurhatDetail() {
         await updateDoc(curhatDocRef, {
           view_count: increment(1)
         });
-        console.log("View count incremented for curhat:", curhatId);
+        // console.log("View count incremented for curhat:", curhatId);
       } catch (e) {
-        console.error("Error incrementing view count:", e);
+        // console.error("Error incrementing view count:", e);
         // Continue even if view count update fails
       }
       
@@ -99,7 +99,7 @@ export default function CurhatDetail() {
       } as Curhat);
     } catch (error: Error | unknown) {
       const firebaseError = error as { message: string };
-      console.error("Error fetching curhat:", firebaseError);
+      // console.error("Error fetching curhat:", firebaseError);
       setError("Gagal memuat detail curhat");
     }
   };
@@ -133,7 +133,7 @@ export default function CurhatDetail() {
         const firebaseError = error as { message: string };
         if (firebaseError.message && firebaseError.message.includes('requires an index')) {
           // Silencing the console.error to prevent cluttering the console
-          console.log("Index is being built. Using fallback query...");
+          // console.log("Index is being built. Using fallback query...");
           // Try a simpler query without ordering
           const simpleQuery = query(
             collection(db, "comments"),
@@ -169,7 +169,7 @@ export default function CurhatDetail() {
         }
       }
     } catch (error: Error | unknown) {
-      console.error("Error fetching comments:", error);
+      // console.error("Error fetching comments:", error);
       setError("Gagal memuat komentar");
     }
   };
@@ -192,7 +192,7 @@ export default function CurhatDetail() {
         // Fetch comments
         await fetchComments();
       } catch (error: Error | unknown) {
-        console.error("Error initializing page:", error);
+        // console.error("Error initializing page:", error);
         setError("Terjadi kesalahan dalam memuat halaman");
       } finally {
         setLoading(false);
@@ -275,7 +275,7 @@ export default function CurhatDetail() {
             comment_count: currentCommentCount + 1
           });
           
-          console.log(`Comment count incremented for curhat ${curhatId}: ${currentCommentCount + 1}`);
+          //  console.log(`Comment count incremented for curhat ${curhatId}: ${currentCommentCount + 1}`);
           
           // Update local state to reflect the new comment count
           if (curhat) {
@@ -291,7 +291,7 @@ export default function CurhatDetail() {
           });
         }
       } catch (e) {
-        console.error("Error incrementing comment count:", e);
+        // console.error("Error incrementing comment count:", e);
         // Continue even if comment count update fails
       }
       
@@ -307,7 +307,7 @@ export default function CurhatDetail() {
       
     } catch (error: Error | unknown) {
       const firebaseError = error as { message: string };
-      console.error("Error adding comment:", error);
+      // console.error("Error adding comment:", error);
       setError(`Gagal mengirim komentar: ${firebaseError.message}`);
     } finally {
       setCommentLoading(false);
