@@ -83,9 +83,8 @@ export default function CurhatDetail() {
         await updateDoc(curhatDocRef, {
           view_count: increment(1)
         });
-        // console.log("View count incremented for curhat:", curhatId);
-      } catch (e) {
-        // console.error("Error incrementing view count:", e);
+      } catch (error_) {
+        setError("Gagal memuat data");
         // Continue even if view count update fails
       }
       
@@ -98,9 +97,9 @@ export default function CurhatDetail() {
         anonymousId: curhatData.user_id ? curhatData.user_id.substring(0, 5) : 'anon'
       } as Curhat);
     } catch (error: Error | unknown) {
-      const firebaseError = error as { message: string };
-      // console.error("Error fetching curhat:", firebaseError);
-      setError("Gagal memuat detail curhat");
+      const firebaseError = error as { code?: string; message: string };
+      console.error("Error fetching curhat:", firebaseError.message);
+      setError(`Gagal mengambil data: ${firebaseError.message}`);
     }
   };
 
@@ -128,12 +127,11 @@ export default function CurhatDetail() {
         });
         
         setComments(commentsData);
-      } catch (error: Error | unknown) {
+      } catch (error_) {
         // Handle missing index error gracefully
-        const firebaseError = error as { message: string };
+        const firebaseError = error_ as { message: string };
         if (firebaseError.message && firebaseError.message.includes('requires an index')) {
           // Silencing the console.error to prevent cluttering the console
-          // console.log("Index is being built. Using fallback query...");
           // Try a simpler query without ordering
           const simpleQuery = query(
             collection(db, "comments"),
@@ -165,10 +163,10 @@ export default function CurhatDetail() {
           setError("Komentar ditampilkan berdasarkan waktu pengiriman (sistem sedang ditingkatkan)");
         } else {
           // Rethrow if not an index error
-          throw error;
+          throw error_;
         }
       }
-    } catch (error: Error | unknown) {
+    } catch (error_) {
       // console.error("Error fetching comments:", error);
       setError("Gagal memuat komentar");
     }
@@ -204,9 +202,7 @@ export default function CurhatDetail() {
   }, [curhatId]);
 
   // Submit comment
-  const handleSubmitComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSubmitComment = async () => {
     // Validation
     if (commentText.trim().length < 3) {
       setError('Komentar minimal 3 karakter');
@@ -275,8 +271,6 @@ export default function CurhatDetail() {
             comment_count: currentCommentCount + 1
           });
           
-          //  console.log(`Comment count incremented for curhat ${curhatId}: ${currentCommentCount + 1}`);
-          
           // Update local state to reflect the new comment count
           if (curhat) {
             setCurhat({
@@ -290,8 +284,8 @@ export default function CurhatDetail() {
             comment_count: increment(1)
           });
         }
-      } catch (e) {
-        // console.error("Error incrementing comment count:", e);
+      } catch (error_) {
+        setError("Gagal memuat data");
         // Continue even if comment count update fails
       }
       
@@ -306,8 +300,8 @@ export default function CurhatDetail() {
       setTimeout(() => setSuccess(false), 3000);
       
     } catch (error: Error | unknown) {
-      const firebaseError = error as { message: string };
-      // console.error("Error adding comment:", error);
+      const firebaseError = error as { code?: string; message: string };
+      console.error("Error adding comment:", firebaseError.message);
       setError(`Gagal mengirim komentar: ${firebaseError.message}`);
     } finally {
       setCommentLoading(false);

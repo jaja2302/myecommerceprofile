@@ -8,7 +8,7 @@ import { signInAnonymously } from 'firebase/auth';
 import { collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, where, doc, updateDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import FilteringWords from '@/data/filteringWords';
-const { containsKataKasar, containsLink, containsKoordinat, containsAlamat, debugTextFilter } = FilteringWords;
+const { debugTextFilter } = FilteringWords;
 
 // Types for our data
 interface Curhat {
@@ -193,8 +193,8 @@ export default function CurhatAnonim() {
       }
     } catch (error: Error | unknown) {
       const firebaseError = error as { code?: string; message: string };
-      console.error("Error fetching top curhatan:", firebaseError.code, firebaseError.message);
-      // Tidak menampilkan error ke user, hanya log ke console
+      // console.error("Error fetching top curhatan:", firebaseError.code, firebaseError.message);
+      setError(`Gagal mengambil data: ${firebaseError.message}`);
     } finally {
       setTopLoading(false);
     }
@@ -260,15 +260,14 @@ export default function CurhatAnonim() {
         user_id: userId,
         text: curhatText,
         created_at: serverTimestamp(),
-        client_timestamp: new Date().toISOString(), // Tambahan ini sebagai fallback
-        view_count: 0, // Tambahkan view count
-        comment_count: 0, // Tambahkan comment count
-        created_week: getWeekNumber(new Date()) // Tambahkan week number untuk top mingguan
+        client_timestamp: new Date().toISOString(),
+        view_count: 0,
+        comment_count: 0,
+        created_week: getWeekNumber(new Date())
       };
       
       // Simpan ke Firestore
-      const docRef = await addDoc(collection(db, "curhatan"), curhatData);
-      // console.log("Curhat added with ID:", docRef.id);
+      await addDoc(collection(db, "curhatan"), curhatData);
       
       // Reset form & tampilkan pesan sukses
       setCurhatText('');
@@ -282,7 +281,7 @@ export default function CurhatAnonim() {
       
     } catch (error: Error | unknown) {
       const firebaseError = error as { code?: string; message: string };
-      console.error("Error adding curhat:", firebaseError.code, firebaseError.message);
+      // console.error("Error adding curhat:", firebaseError.code, firebaseError.message);
       setError(`Gagal mengirim curhat: ${firebaseError.message}`);
     } finally {
       setLoading(false);
@@ -324,8 +323,10 @@ export default function CurhatAnonim() {
       // Refresh the lists after fixing
       await fetchCurhatan();
       await fetchTopWeeklyCurhatan();
-    } catch (error) {
-      // console.error("Error fixing comment counts:", error);
+    } catch (error: Error | unknown) {
+      const firebaseError = error as { code?: string; message: string };
+      setError(`Gagal mengirim curhat: ${firebaseError.message}`);
+      // Just ignore errors silently in production
     } finally {
       setFixingComments(false);
     }
