@@ -7,7 +7,6 @@ import { Navbar } from "@/components/Navbar";
 import { AnimatedTestimonials } from "@/components/AnimatedTestimonials";
 import { TechStack } from "@/components/TechStack";
 
-
 const testimonials = [
   {
     quote: "Pelayanan yang sangat baik dan profesional. Selalu siap membantu kapan saja.",

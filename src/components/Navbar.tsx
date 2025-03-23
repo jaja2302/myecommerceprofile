@@ -23,6 +23,16 @@ export function Navbar() {
   }, []);
 
   const handleScrollToSection = (sectionId: string) => {
+    // Check if we're on the homepage
+    const isHomePage = window.location.pathname === '/';
+    
+    if (!isHomePage) {
+      // If not on homepage, redirect to homepage with section hash
+      window.location.href = `/#${sectionId}`;
+      return;
+    }
+    
+    // Existing scroll behavior for homepage
     const element = document.getElementById(sectionId);
     if (element) {
       const offsetTop = element.getBoundingClientRect().top + window.pageYOffset;
@@ -36,6 +46,12 @@ export function Navbar() {
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
+    setIsMobileMenuOpen(false);
+  };
+
+  // Tambahkan fungsi untuk navigasi ke halaman lain
+  const navigateToPage = (path: string) => {
+    window.location.href = path;
     setIsMobileMenuOpen(false);
   };
   
@@ -63,6 +79,12 @@ export function Navbar() {
             className="text-gray-300 hover:text-white transition-colors"
           >
             Tech Stack
+          </button>
+          <button 
+            onClick={() => navigateToPage('/mini-games')}
+            className="text-gray-300 hover:text-white transition-colors"
+          >
+            Mini Games
           </button>
           <button 
             onClick={() => handleScrollToSection("testimonials")}
@@ -158,6 +180,12 @@ export function Navbar() {
               className="text-gray-300 hover:text-white transition-colors py-2"
             >
               Tech Stack
+            </button>
+            <button 
+              onClick={() => navigateToPage('/mini-games')}
+              className="text-gray-300 hover:text-white transition-colors py-2"
+            >
+              Mini Games
             </button>
             <button 
               onClick={() => handleScrollToSection("testimonials")}
