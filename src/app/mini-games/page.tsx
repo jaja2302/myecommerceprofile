@@ -56,13 +56,35 @@ export default function MiniGames() {
               Games Lainnya
             </h2>
             
-            <div className="bg-gradient-to-br from-gray-900/40 to-black border border-gray-700/30 rounded-lg p-8 text-center">
-              <h3 className="text-xl font-bold text-gray-300 mb-2">
-                Coming Soon!
-              </h3>
-              <p className="text-gray-400">
-                Mini games lainnya akan segera hadir. Tunggu update selanjutnya!
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Curhat Anonim Card */}
+              <Link 
+                href="/mini-games/curhat-anonim" 
+                className="bg-gradient-to-br from-blue-900/40 to-black border border-blue-500/30 rounded-lg p-6 hover:shadow-lg hover:shadow-blue-500/20 transition-all group"
+              >
+                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">
+                  Curhat Anonim
+                </h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  Bagikan ceritamu secara anonim dan dapatkan tanggapan dari orang lain. Tempat aman untuk mencurahkan isi hati tanpa khawatir identitasmu terungkap.
+                </p>
+                <div className="text-blue-500 text-sm font-medium flex items-center">
+                  Mulai Curhat
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </Link>
+              
+              {/* Coming Soon Card */}
+              <div className="bg-gradient-to-br from-gray-900/40 to-black border border-gray-700/30 rounded-lg p-6 text-center">
+                <h3 className="text-xl font-bold text-gray-300 mb-2">
+                  Coming Soon!
+                </h3>
+                <p className="text-gray-400">
+                  Mini games lainnya akan segera hadir. Tunggu update selanjutnya!
+                </p>
+              </div>
             </div>
           </div>
         </div>
