@@ -29,11 +29,13 @@ export default function Home() {
       <HeroSection />
       
       <section id="about">
+        <h1 className="text-4xl font-bold text-center mb-8">Tentang El Shop</h1>
         <CompanyProfile />
       </section>
       
       <section id="products" className="py-12 sm:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <h2 className="text-3xl font-bold mb-8">Produk Kami</h2>
           <ProductList />
         </div>
       </section>

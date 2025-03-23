@@ -1,0 +1,19 @@
+{
+  "name": "El Shop",
+  "short_name": "El Shop",
+  "icons": [
+    {
+      "src": "/og-image.webp",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/og-image.webp",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "display": "standalone"
+} 
