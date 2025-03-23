@@ -7,7 +7,7 @@ export const KATA_KASAR = [
   'jelek', 'bodoh', 'tolol', 'goblok',
   
   // Vulgar terms 
-  'sex', 'ngetod', 
+  'sex', 'ngnetod', 
   
   // Vulgar terms in Indonesian
   'anjing', 'bangsat', 'kontol', 'memek', 'ngentot', 'jancok', 'asu', 'bajingan', 
@@ -17,16 +17,15 @@ export const KATA_KASAR = [
   'jablay', 'jablai', 'jalang',
   
   // Short forms/abbreviations
-  'awa', 'masa', 'tol',
-  
+  'tod',
   // Common number substitutions (also handled by normalization function)
   'm3m3k', 'm3mek', 'mem3k', 'k0nt0l', 'p3n1s', 'v4g1n4', 'j4bl4y', '4nj1ng',
   
   // Other terms that may bypass filter
-  'itil', 'tempik', 'bacot', 'coli', 'colmek', 'gatal', 'nyaaa',
+  'itil', 'tempik', 'bacot', 'coli', 'colmek',
   
   // Potential words seen in screenshot
-  'lapar', 'nyaaaa'
+
 ]; 
 
 // Regex untuk mendeteksi link
