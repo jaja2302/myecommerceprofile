@@ -8,6 +8,7 @@ import { signInAnonymously } from 'firebase/auth';
 import { collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, where, doc, updateDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import FilteringWords from '@/data/filteringWords';
+import { getPermanentUserId, mapFirebaseIdToPermanentId } from '@/lib/userIdentifier';
 const { debugTextFilter } = FilteringWords;
 
 // Types for our data
@@ -37,6 +38,8 @@ const getWeekNumber = (date: Date): string => {
 };
 
 export default function CurhatAnonim() {
+  // Use combined permanent ID and Firebase anonymous auth
+  const permanentId = getPermanentUserId();
   const [userId, setUserId] = useState<string | null>(null);
   const [curhatText, setCurhatText] = useState('');
   const [curhatList, setCurhatList] = useState<Curhat[]>([]);
@@ -51,12 +54,26 @@ export default function CurhatAnonim() {
   useEffect(() => {
     const signInAnon = async () => {
       try {
+        // First, check if we already have a user ID from permanent ID
+        if (permanentId && !userId) {
+          // Use permanent ID as a fallback if Firebase auth fails
+          setUserId(permanentId);
+        }
+
+        // Still try to sign in with Firebase for proper permissions
         const userCredential = await signInAnonymously(auth);
         setUserId(userCredential.user.uid);
-        // console.log("Signed in anonymously with UID:", userCredential.user.uid);
+        
+        // Store the relationship between Firebase UID and permanent ID
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('firebase_auth_id', userCredential.user.uid);
+          localStorage.setItem('user_id_map', JSON.stringify({
+            firebaseId: userCredential.user.uid,
+            permanentId: permanentId
+          }));
+        }
       } catch (error: Error | unknown) {
         const firebaseError = error as { code?: string; message: string };
-        // console.error("Error signing in anonymously:", firebaseError.code, firebaseError.message);
         setError(`Gagal masuk secara anonim: ${firebaseError.message}`);
       }
     };
@@ -200,35 +217,26 @@ export default function CurhatAnonim() {
     }
   };
 
-  // Modifikasi bagian handleSubmitCurhat untuk handle error lebih baik
+  // Modifikasi bagian handleSubmitCurhat untuk handle error lebih baik dan use permanent ID
   const handleSubmitCurhat = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Log message for debugging
-    // console.log("Validating message:", curhatText);
-    // console.log("Message length:", curhatText.trim().length);
-    
     // Advanced debugging
     const debugResult = debugTextFilter(curhatText);
-    // console.log("Debug filter result:", debugResult);
     
     // Validasi
     if (curhatText.trim().length < 10) {
-      // console.log("Error: Minimum length not met");
       setError('Curhat minimal 10 karakter');
       return;
     }
     
     if (curhatText.trim().length > 300) {
-      // console.log("Error: Maximum length exceeded");
       setError('Curhat maksimal 300 karakter');
       return;
     }
     
     // Check for overall filtering result
     if (debugResult.isFiltered) {
-      // console.log(`Filtering reason: ${debugResult.reason}, Match: ${debugResult.match}`);
-      
       if (debugResult.reason.includes("Contains inappropriate word")) {
         setError(`Tolong jaga bahasa kamu ya! Kata "${debugResult.match}" tidak diperbolehkan.`);
       } else if (debugResult.reason.includes("Contains link")) {
@@ -243,9 +251,17 @@ export default function CurhatAnonim() {
       return;
     }
     
-    if (!userId) {
+    // Use a consistent user ID - either from Firebase auth or permanent ID
+    const effectiveUserId = userId || permanentId;
+    
+    if (!effectiveUserId) {
       setError('Terjadi kesalahan autentikasi. Refresh halaman dan coba lagi.');
       return;
+    }
+    
+    // If we have a Firebase auth ID, map it to our permanent ID
+    if (userId && userId !== permanentId) {
+      mapFirebaseIdToPermanentId(userId);
     }
     
     try {
@@ -257,7 +273,7 @@ export default function CurhatAnonim() {
       // Tambahkan timestamp client-side sebagai fallback
       // dan tetap gunakan serverTimestamp untuk timestamp yang akurat
       const curhatData = {
-        user_id: userId,
+        user_id: effectiveUserId,
         text: curhatText,
         created_at: serverTimestamp(),
         client_timestamp: new Date().toISOString(),

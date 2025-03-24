@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug Access - Clear Collections</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #1a1a1a;
+      color: #f0f0f0;
+    }
+    h1, h2 {
+      color: #10b981;
+    }
+    .card {
+      background-color: #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    button {
+      background-color: #10b981;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background-color: #0d9669;
+    }
+    button.danger {
+      background-color: #ef4444;
+    }
+    button.danger:hover {
+      background-color: #dc2626;
+    }
+    .token-input {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+    input {
+      background-color: #3a3a3a;
+      border: 1px solid #4a4a4a;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      flex-grow: 1;
+    }
+    pre {
+      background-color: #3a3a3a;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .status {
+      margin-top: 20px;
+    }
+    .success {
+      color: #10b981;
+    }
+    .error {
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <h1>Anon Chat Debug Tools</h1>
+  
+  <div class="card">
+    <h2>Debug Token</h2>
+    <div class="token-input">
+      <input type="text" id="tokenInput" placeholder="Enter debug token..." value="jojokganteng">
+      <button id="saveToken">Save Token</button>
+    </div>
+  </div>
+  
+  <div class="card">
+    <h2>Database Actions</h2>
+    <p>Gunakan tool ini untuk membersihkan database Firebase.</p>
+    
+    <div class="actions">
+      <button id="clearDb" class="danger">Clear All Collections</button>
+    </div>
+    
+    <div class="status" id="dbStatus"></div>
+  </div>
+  
+  <div class="card">
+    <h2>Browser Storage</h2>
+    <p>Gunakan tool ini untuk membersihkan data browser.</p>
+    
+    <div class="actions">
+      <button id="openStorageCleaner">Open Storage Cleaner</button>
+      <button id="clearLocalStorage">Clear Local Storage</button>
+      <button id="clearSessionStorage">Clear Session Storage</button>
+    </div>
+    
+    <div class="status" id="storageStatus"></div>
+  </div>
+  
+  <div class="card">
+    <h2>Response</h2>
+    <pre id="responseData">No data yet</pre>
+  </div>
+  
+  <div class="card">
+    <h2>Navigation</h2>
+    <div class="actions">
+      <a href="/debug" style="text-decoration: none;"><button>Go to Debug Dashboard</button></a>
+      <a href="/mini-games/anon-chat" style="text-decoration: none;"><button>Go to Anon Chat</button></a>
+    </div>
+  </div>
+
+  <script>
+    // Load token from localStorage
+    document.addEventListener('DOMContentLoaded', function() {
+      const savedToken = localStorage.getItem('debug_token');
+      if (savedToken) {
+        document.getElementById('tokenInput').value = savedToken;
+      }
+    });
+    
+    // Save token
+    document.getElementById('saveToken').addEventListener('click', function() {
+      const token = document.getElementById('tokenInput').value.trim();
+      if (token) {
+        localStorage.setItem('debug_token', token);
+        updateStatus('storageStatus', 'Token saved successfully!', 'success');
+      } else {
+        updateStatus('storageStatus', 'Please enter a valid token', 'error');
+      }
+    });
+    
+    // Clear database
+    document.getElementById('clearDb').addEventListener('click', async function() {
+      const token = document.getElementById('tokenInput').value.trim();
+      if (!token) {
+        updateStatus('dbStatus', 'Please enter a debug token', 'error');
+        return;
+      }
+      
+      updateStatus('dbStatus', 'Clearing database...', 'normal');
+      document.getElementById('responseData').textContent = 'Processing...';
+      
+      try {
+        const response = await fetch(`/api/dev/clear-db?token=${encodeURIComponent(token)}`);
+        const data = await response.json();
+        
+        document.getElementById('responseData').textContent = JSON.stringify(data, null, 2);
+        
+        if (response.ok) {
+          updateStatus('dbStatus', 'Database cleared successfully!', 'success');
+        } else {
+          updateStatus('dbStatus', `Error: ${data.error || 'Unknown error'}`, 'error');
+        }
+      } catch (error) {
+        updateStatus('dbStatus', `Error: ${error.message}`, 'error');
+        document.getElementById('responseData').textContent = `Error: ${error.message}`;
+      }
+    });
+    
+    // Open storage cleaner
+    document.getElementById('openStorageCleaner').addEventListener('click', function() {
+      const token = document.getElementById('tokenInput').value.trim();
+      if (token) {
+        window.open(`/api/dev/clear-browser-storage?token=${encodeURIComponent(token)}`, '_blank');
+      } else {
+        updateStatus('storageStatus', 'Please enter a debug token', 'error');
+      }
+    });
+    
+    // Clear localStorage
+    document.getElementById('clearLocalStorage').addEventListener('click', function() {
+      try {
+        localStorage.clear();
+        updateStatus('storageStatus', 'localStorage cleared successfully!', 'success');
+      } catch (error) {
+        updateStatus('storageStatus', `Error clearing localStorage: ${error.message}`, 'error');
+      }
+    });
+    
+    // Clear sessionStorage
+    document.getElementById('clearSessionStorage').addEventListener('click', function() {
+      try {
+        sessionStorage.clear();
+        updateStatus('storageStatus', 'sessionStorage cleared successfully!', 'success');
+      } catch (error) {
+        updateStatus('storageStatus', `Error clearing sessionStorage: ${error.message}`, 'error');
+      }
+    });
+    
+    // Helper to update status
+    function updateStatus(elementId, message, type = 'normal') {
+      const element = document.getElementById(elementId);
+      element.textContent = message;
+      element.className = 'status ' + type;
+      
+      // Auto-clear after 5 seconds
+      setTimeout(() => {
+        if (element.textContent === message) {
+          element.textContent = '';
+          element.className = 'status';
+        }
+      }, 5000);
+    }
+  </script>
+</body>
+</html> 

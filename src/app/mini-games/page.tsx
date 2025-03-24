@@ -1,7 +1,7 @@
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import Link from "next/link";
-import { personalityTests } from "@/data/personalityTests";
+
 
 export default function MiniGames() {
   return (
@@ -17,46 +17,33 @@ export default function MiniGames() {
           Pilih salah satu di bawah ini dan nikmati keseruannya!
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {/* Personality Tests Section */}
+        <div className="grid grid-cols-1 gap-8">
+          {/* Main Games Section - Two main cards side by side */}
           <div className="col-span-full mb-12">
             <h2 className="text-2xl font-bold text-white mb-6 pb-2 border-b border-purple-500 inline-block">
               Tes Kepribadian
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {personalityTests.map((test, index) => (
-                <Link 
-                  href={`/mini-games/personality-test/${index}`} 
-                  key={index}
-                  className="bg-gradient-to-br from-purple-900/40 to-black border border-purple-500/30 rounded-lg p-6 hover:shadow-lg hover:shadow-purple-500/20 transition-all group"
-                >
-                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-purple-400 transition-colors">
-                    {test.title.replace(/\"([^\"]*)\"/g, '$1')}
-                  </h3>
-                  <p className="text-gray-400 text-sm mb-4">
-                    {test.description.length > 100 
-                      ? test.description.substring(0, 100) + '...' 
-                      : test.description}
-                  </p>
-                  <div className="text-purple-500 text-sm font-medium flex items-center">
-                    Mulai Tes
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-          
-          {/* Placeholder for future games */}
-          <div className="col-span-full">
-            <h2 className="text-2xl font-bold text-white mb-6 pb-2 border-b border-purple-500 inline-block">
-              Games Lainnya
-            </h2>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Personality Test Card */}
+              <Link 
+                href="/mini-games/personality-intro" 
+                className="bg-gradient-to-br from-purple-900/40 to-black border border-purple-500/30 rounded-lg p-6 hover:shadow-lg hover:shadow-purple-500/20 transition-all group"
+              >
+                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-purple-400 transition-colors">
+                  Tes Kepribadian
+                </h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  Berbagai tes kepribadian seru dan absurd untuk mengetahui sisi tersembunyi dirimu, pasanganmu, dan lainnya!
+                </p>
+                <div className="text-purple-500 text-sm font-medium flex items-center">
+                  Pilih Tes
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </Link>
+              
               {/* Curhat Anonim Card */}
               <Link 
                 href="/mini-games/curhat-anonim" 
@@ -70,6 +57,34 @@ export default function MiniGames() {
                 </p>
                 <div className="text-blue-500 text-sm font-medium flex items-center">
                   Mulai Curhat
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </Link>
+            </div>
+          </div>
+          
+          {/* Future Games Section */}
+          <div className="col-span-full">
+            <h2 className="text-2xl font-bold text-white mb-6 pb-2 border-b border-purple-500 inline-block">
+              Games Lainnya
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Anon Chat Card - NEW ADDITION */}
+              <Link 
+                href="/mini-games/anon-chat" 
+                className="bg-gradient-to-br from-green-900/40 to-black border border-green-500/30 rounded-lg p-6 hover:shadow-lg hover:shadow-green-500/20 transition-all group"
+              >
+                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-green-400 transition-colors">
+                  Anon Chat
+                </h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  Ngobrol anonim dengan orang baru! Pilih preferensi gender dan mulai percakapan menarik dengan siapa saja tanpa harus mengungkapkan identitasmu.
+                </p>
+                <div className="text-green-500 text-sm font-medium flex items-center">
+                  Mulai Chat
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>

@@ -1,0 +1,199 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions for validation
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    function isValidSecurityToken() {
+      // Check if the document has a valid security token structure
+      return 'securityToken' in request.resource.data &&
+             'owner' in request.resource.data &&
+             'platform' in request.resource.data &&
+             'ownerVerified' in request.resource.data;
+    }
+    
+    function hasValidUserId() {
+      // For anonymous features: check if the document has a non-empty userId
+      return request.resource.data.userId != null && 
+             request.resource.data.userId != "";
+    }
+    
+    // Debug admin function - untuk keperluan development
+    function isAdmin() {
+      return request.auth != null && 
+             (request.auth.uid == 'admin' || 
+              request.auth.token.admin == true ||
+              request.query.debug_token == "jojokganteng");
+    }
+    
+    // Global admin rule - bisa mengakses dan memodifikasi semua data
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Curhat Anonim rules
+    match /curhatan/{document=**} {
+      // Allow anyone to read curhat posts
+      allow read;
+      
+      // Only allow creation with valid authentication and security token
+      allow create: if isAuthenticated() || 
+                     (isValidSecurityToken() && 
+                     request.resource.data.owner == request.resource.data.user_id);
+      
+      // Only allow the owner to update or delete their own posts
+      allow update, delete: if isOwner(resource.data.user_id) || 
+                              (resource.data.owner == request.auth.uid);
+    }
+    
+    // Comments on Curhat
+    match /comments/{document=**} {
+      // Anyone can read comments
+      allow read;
+      
+      // Must be authenticated or have valid security token to create
+      allow create: if isAuthenticated() || isValidSecurityToken();
+      
+      // Only the owner can update or delete
+      allow update, delete: if isOwner(resource.data.user_id) || 
+                              (resource.data.owner == request.auth.uid);
+    }
+    
+    // New Anonymous Chat rules using single table approach
+    match /anon_sessions/{sessionId} {
+      // Allow everyone to read session data
+      allow read;
+      
+      // Allow creating sessions if user_id is provided
+      allow create: if request.resource.data.user_id != null;
+      
+      // Allow updating sessions by the session owner or partner
+      allow update: if 
+        // Owner can update their own session
+        request.resource.data.user_id == resource.data.user_id ||
+        // Partner can update if they have a valid connection
+        (resource.data.partner_id != null && 
+         request.resource.data.user_id == resource.data.partner_id);
+      
+      // Allow deletion by session owners
+      allow delete: if true; // For easier debugging during development
+
+      // Messages in anonymous chat sessions - allow all operations for simplicity during development
+      match /messages/{messageId} {
+        // Anyone can read messages
+        allow read;
+        
+        // Allow creating messages with a valid senderId
+        allow create;
+        
+        // No updates to messages
+        allow update: if false;
+        
+        // Allow message deletion
+        allow delete: if true; // For easier debugging during development
+      }
+    }
+    
+    // Legacy Anonymous Chat rules (kept for backward compatibility)
+    match /waitingRooms/{roomId} {
+      // Anyone can read waiting rooms
+      allow read;
+      
+      // Allow creation with security token validation or valid userId
+      allow create: if isValidSecurityToken() || hasValidUserId();
+      
+      // Allow updates to own waiting rooms
+      allow update: if resource.data.owner == request.resource.data.owner || 
+                      resource.data.userId == request.resource.data.userId;
+      
+      // Allow deletion of own waiting rooms
+      allow delete: if (isAuthenticated() && isOwner(resource.data.userId)) || 
+                      resource.data.owner == resource.data.userId;
+    }
+    
+    // Chat rooms
+    match /chatRooms/{roomId} {
+      // Anyone can read chat rooms
+      allow read;
+      
+      // Allow creation with security token or valid user data
+      allow create: if isValidSecurityToken() || 
+                     (request.resource.data.users != null && 
+                      request.resource.data.users.size() > 0);
+      
+      // Allow participants to update the room
+      allow update: if (isAuthenticated() && request.auth.uid != null && 
+                      resource.data.users.hasAny([request.auth.uid])) || 
+                     (request.resource.data.users != null && 
+                      request.resource.data.users.hasAny([request.resource.data.owner])) || 
+                     (resource.data.owner == request.resource.data.owner);
+      
+      // Messages in chat rooms
+      match /messages/{messageId} {
+        // Anyone can read messages
+        allow read;
+        
+        // Allow creation with security token or valid message data
+        allow create: if isValidSecurityToken() || 
+                       (request.resource.data.senderId != null && 
+                        request.resource.data.text != null) || 
+                       (request.resource.data.senderId == 'system' && 
+                        request.resource.data.isSystemMessage == true);
+        
+        // No updates to messages
+        allow update: if false;
+        
+        // Allow deletion only by message sender or system
+        allow delete: if (isAuthenticated() && request.auth.uid == resource.data.senderId) || 
+                       (isAuthenticated() && request.auth.uid == "system");
+      }
+    }
+    
+    // Browser token storage
+    match /browserTokens/{tokenId} {
+      // Allow reading own tokens
+      allow read;
+      
+      // Allow creation with minimal validation
+      allow create: if request.resource.data.userId != null && 
+                     request.resource.data.token != null;
+      
+      // Allow updating own tokens by userId
+      allow update: if request.resource.data.userId == resource.data.userId;
+      
+      // Allow deletion with auth
+      allow delete; // Untuk keperluan debug, allow deletion of any token
+    }
+    
+    // Chat sessions
+    match /chatSessions/{sessionId} {
+      // Allow reading own sessions
+      allow read;
+      
+      // Allow creation with minimal validation
+      allow create: if request.resource.data.userId != null;
+      
+      // Allow updating own sessions by userId
+      allow update: if request.resource.data.userId == resource.data.userId;
+      
+      // Allow deletion
+      allow delete; // Untuk keperluan debug, allow deletion of any session
+    }
+    
+    // Auto-cleanup system rules - untuk membersihkan data lama secara otomatis
+    match /system-cleanup/{document=**} {
+      // Hanya admin yang bisa membaca/mengedit
+      allow read, write: if isAdmin();
+      
+      // Allow read for system cleanup functions
+      allow read: if request.auth != null && request.auth.uid == 'system-cleanup';
+    }
+  }
+} 

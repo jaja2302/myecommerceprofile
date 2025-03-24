@@ -1,7 +1,9 @@
 // File ini untuk Metadata (server-side)
-export const metadata = {
-  title: 'El Shop - Website Produk dan Mini Games',
-  description: 'El Shop menyediakan berbagai produk dan mini games seru termasuk tes kepribadian.',
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'El Shop',
+  description: 'Website El Shop',
   keywords: 'el shop, toko online, mini games, tes kepribadian, produk digital',
   // ... metadata lainnya
 } 

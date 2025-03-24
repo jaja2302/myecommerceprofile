@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Anon Chat App
 
-## Getting Started
+Aplikasi chat anonim yang memungkinkan pengguna berbicara dengan orang lain secara anonim, dengan dukungan pencocokan berdasarkan gender.
 
-First, run the development server:
+## Fitur Utama
+
+- Chat anonim real-time antara dua pengguna
+- Pencocokan berdasarkan preferensi gender (laki-laki, perempuan, atau acak)
+- Identifikasi unik per perangkat untuk mencegah koneksi dengan diri sendiri
+- Antarmuka yang responsif dan mudah digunakan
+- Sistem pencocokan otomatis dengan status koneksi yang jelas
+- Notifikasi sistem untuk status percakapan (terhubung, terputus, dll.)
+
+## Teknologi
+
+- Next.js (React) untuk frontend
+- Firebase Firestore untuk database real-time
+- TypeScript untuk type safety
+- Tailwind CSS untuk styling
+- Framer Motion untuk animasi
+
+## Sistem Identifikasi Pengguna
+
+Aplikasi menggunakan beberapa layer identifikasi untuk memastikan anonimitas sekaligus mencegah koneksi dengan diri sendiri:
+
+1. **Permanent User ID**: ID yang konsisten di browser yang sama (tersimpan di localStorage)
+2. **Device Fingerprint**: Identifikasi unik untuk perangkat berdasarkan karakteristik hardware/browser
+3. **Device-Specific User ID**: Kombinasi dari Permanent ID dan Device Fingerprint untuk membedakan perangkat
+4. **Browser Token**: Token unik untuk setiap browser untuk identifikasi tambahan
+
+## Tools Debugging
+
+Untuk memudahkan development dan debugging, aplikasi ini dilengkapi dengan tools khusus:
+
+### 1. Database Cleaner
+
+Endpoint: `/api/dev/clear-db?token=dev-debug-token`
+
+Fungsi:
+- Menghapus semua data di Firestore database
+- Membersihkan koleksi: browserTokens, chatRooms, chatSessions, comments, curhatan, waitingRooms
+- Menghapus subcollection messages dalam chatRooms
+
+### 2. Browser Storage Cleaner
+firebase deploy --only firestore:rules --project sosmed-34308
+Endpoint: `/api/dev/clear-browser-storage?token=dev-debug-token`
+
+Fungsi:
+- Interface untuk melihat dan menghapus data localStorage dan sessionStorage
+- Opsi untuk menghapus hanya data Anon Chat atau semua data browser
+- Menampilkan semua data browser secara terstruktur untuk analisis
+
+### 3. Debug Dashboard
+
+URL: `/debug`
+
+Fitur:
+- Menampilkan informasi identitas pengguna (User ID, Device Fingerprint, dll.)
+- Akses cepat ke semua tool debugging
+- Kontrol untuk membersihkan database dengan status feedback
+- Shortcut untuk membuka Anon Chat di tab baru untuk testing multi-device
+
+## Cara Menggunakan Debug Tools
+
+1. Akses halaman dashboard debug di `/debug`
+2. Untuk membersihkan database, gunakan token default `dev-debug-token`
+3. Untuk membersihkan data browser, klik "Open Storage Cleaner"
+4. Untuk testing multi-device, gunakan link "Open in New Tab"
+
+## Catatan Keamanan
+
+- Tools debugging HANYA tersedia dalam mode development
+- Token diperlukan untuk operasi penghapusan database 
+- Gunakan dengan hati-hati karena akan menghapus SEMUA data
+
+## Menjalankan Aplikasi
 
 ```bash
+# Development dengan network access (untuk test multi-device)
+npm run dev:network
+
+# Development biasa
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Troubleshooting
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Jika mengalami masalah dengan koneksi antar perangkat:
+1. Bersihkan database dengan `/api/dev/clear-db`
+2. Bersihkan browser storage dengan `/api/dev/clear-browser-storage`
+3. Restart server development
+4. Coba koneksi dari dua perangkat berbeda

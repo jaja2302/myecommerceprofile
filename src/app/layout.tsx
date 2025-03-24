@@ -1,10 +1,16 @@
-"use client";
-
 import '@/app/globals.css';
 import { Inter } from 'next/font/google';
-import { I18nProvider } from '@/components/I18nProvider';
+import { Metadata } from 'next';
+import './globals.css';
+import { CookieConsent } from '@/components/CookieConsent';
+import { GoogleAnalytics } from '@/components/GoogleAnalytics';
 
 const inter = Inter({ subsets: ['latin'] });
+
+export const metadata: Metadata = {
+  title: 'El Shop',
+  description: 'Website El Shop',
+};
 
 export default function RootLayout({
   children,
@@ -36,7 +42,9 @@ export default function RootLayout({
         <meta property="og:type" content="website" />
       </head>
       <body className={`${inter.className} antialiased overflow-x-hidden`}>
-        <I18nProvider>{children}</I18nProvider>
+        <GoogleAnalytics />
+        {children}
+        <CookieConsent />
       </body>
     </html>
   );

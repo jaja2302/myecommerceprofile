@@ -66,13 +66,13 @@ export function Navbar() {
             onClick={() => handleScrollToSection("about")}
             className="text-gray-300 hover:text-white transition-colors"
           >
-            {t('nav.about')}
+            {t('nav.about') === 'nav.about' ? 'Tentang' : t('nav.about')}
           </button>
           <button 
             onClick={() => handleScrollToSection("products")}
             className="text-gray-300 hover:text-white transition-colors"
           >
-            {t('nav.products')}
+            {t('nav.products') === 'nav.products' ? 'Produk' : t('nav.products')}
           </button>
           <button 
             onClick={() => handleScrollToSection("tech-stack")}
@@ -90,13 +90,13 @@ export function Navbar() {
             onClick={() => handleScrollToSection("testimonials")}
             className="text-gray-300 hover:text-white transition-colors"
           >
-            {t('nav.testimonials')}
+            {t('nav.testimonials') === 'nav.testimonials' ? 'Testimoni' : t('nav.testimonials')}
           </button>
           <button 
             onClick={() => handleScrollToSection("contact")}
             className="text-gray-300 hover:text-white transition-colors"
           >
-            {t('nav.contact')}
+            {t('nav.contact') === 'nav.contact' ? 'Kontak' : t('nav.contact')}
           </button>
           <div className="flex items-center gap-2">
             <button
@@ -167,13 +167,13 @@ export function Navbar() {
               onClick={() => handleScrollToSection("about")}
               className="text-gray-300 hover:text-white transition-colors py-2"
             >
-              {t('nav.about')}
+              {t('nav.about') === 'nav.about' ? 'Tentang' : t('nav.about')}
             </button>
             <button 
               onClick={() => handleScrollToSection("products")}
               className="text-gray-300 hover:text-white transition-colors py-2"
             >
-              {t('nav.products')}
+              {t('nav.products') === 'nav.products' ? 'Produk' : t('nav.products')}
             </button>
             <button 
               onClick={() => handleScrollToSection("tech-stack")}
@@ -191,13 +191,13 @@ export function Navbar() {
               onClick={() => handleScrollToSection("testimonials")}
               className="text-gray-300 hover:text-white transition-colors py-2"
             >
-              {t('nav.testimonials')}
+              {t('nav.testimonials') === 'nav.testimonials' ? 'Testimoni' : t('nav.testimonials')}
             </button>
             <button 
               onClick={() => handleScrollToSection("contact")}
               className="text-gray-300 hover:text-white transition-colors py-2"
             >
-              {t('nav.contact')}
+              {t('nav.contact') === 'nav.contact' ? 'Kontak' : t('nav.contact')}
             </button>
             <div className="flex items-center gap-2 py-2">
               <button
