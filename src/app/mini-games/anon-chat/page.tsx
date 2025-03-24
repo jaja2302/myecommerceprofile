@@ -6,9 +6,10 @@ import { Footer } from "@/components/Footer";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { getFirestore, query, collection, where, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { getFirestore, query, collection, where, getDocs, deleteDoc, doc, updateDoc, setDoc, serverTimestamp, runTransaction } from "firebase/firestore";
 import { firebaseApp } from "@/lib/firebase";
 import userIdentifier from "@/lib/userIdentifier";
+import enhancedAnonChat from "@/lib/enhancedAnonChat";
 
 export default function AnonChatIntro() {
   const router = useRouter();
@@ -16,6 +17,9 @@ export default function AnonChatIntro() {
   const [lookingFor, setLookingFor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const db = getFirestore(firebaseApp);
+
+  // Create a new collection for matchmaking
+  const matchmaking = collection(db, 'anon_matchmaking');
 
   // Clean up any stale sessions for this user
   const cleanupStaleSessions = useCallback(async () => {
@@ -111,6 +115,7 @@ export default function AnonChatIntro() {
       router.push(`/mini-games/anon-chat/room?gender=${gender}&lookingFor=${lookingFor}&ts=${timestamp}`);
     });
   };
+
 
   return (
     <div className="min-h-screen bg-black">

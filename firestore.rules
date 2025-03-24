@@ -72,7 +72,7 @@ service cloud.firestore {
                               (resource.data.owner == request.auth.uid);
     }
     
-    // New Anonymous Chat rules using single table approach
+    // Enhanced Anonymous Chat rules 
     match /anon_sessions/{sessionId} {
       // Allow everyone to read session data
       allow read;
@@ -109,6 +109,35 @@ service cloud.firestore {
         // Allow message deletion
         allow delete: if true; // For easier debugging during development
       }
+    }
+    
+    // Enhanced chat connection tracking
+    match /anon_connections/{connectionId} {
+      // Allow reading connection data
+      allow read;
+      
+      // Allow creating connections if user IDs are provided
+      allow create: if request.resource.data.user1_id != null && 
+                     request.resource.data.user2_id != null;
+      
+      // Allow updating connections by either connected user
+      allow update: if request.resource.data.user1_id == resource.data.user1_id || 
+                     request.resource.data.user2_id == resource.data.user2_id;
+      
+      // Allow deletion during development
+      allow delete: if true; // For debugging
+    }
+    
+    // Enhanced chat heartbeat tracking
+    match /anon_heartbeats/{sessionId} {
+      // Allow reading heartbeat data
+      allow read;
+      
+      // Allow creating/updating heartbeats if user_id is provided
+      allow create, update: if request.resource.data.user_id != null;
+      
+      // Allow deletion during development
+      allow delete: if true; // For debugging
     }
     
     // Legacy Anonymous Chat rules (kept for backward compatibility)

@@ -7,7 +7,7 @@ import { Footer } from "@/components/Footer";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import userIdentifier from "@/lib/userIdentifier";
-import anonChat, { ChatMessage } from "@/lib/anonChat";
+import enhancedAnonChat, { ChatMessage } from "@/lib/enhancedAnonChat";
 import { Timestamp } from "firebase/firestore";
 
 // Loading component for Suspense fallback
@@ -39,18 +39,23 @@ function ChatRoomContent() {
   const searchParams = useSearchParams();
   const gender = searchParams.get('gender') || '';
   const lookingFor = searchParams.get('lookingFor') || '';
+  // If session ID is provided in URL, use it
+  const initialSessionId = searchParams.get('session') || null;
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [status, setStatus] = useState<'connecting' | 'waiting' | 'chatting' | 'disconnected'>('connecting');
   const [partnerStatus, setPartnerStatus] = useState<'typing' | 'online' | 'offline'>('online');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
   const [partnerId, setPartnerId] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const messageSearchIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const messagesListenerRef = useRef<(() => void) | null>(null);
   const sessionListenerRef = useRef<(() => void) | null>(null);
   const userId = userIdentifier.getPermanentUserId();
@@ -75,9 +80,7 @@ function ChatRoomContent() {
 
   // Scroll to bottom utility
   const scrollToBottom = useCallback(() => {
-    // Add a check to make sure the ref exists
     if (messagesEndRef.current) {
-      // Use scrollIntoView with a small timeout to avoid continuous scrolling
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }, 100);
@@ -86,7 +89,6 @@ function ChatRoomContent() {
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    // Only scroll if there are messages and the component is mounted
     if (messages.length > 0 && messagesEndRef.current) {
       scrollToBottom();
     }
@@ -104,25 +106,18 @@ function ChatRoomContent() {
       senderId: 'system',
       timestamp: new Date(),
       isSystemMessage: true,
-      user_id: userId, // Include user ID for permissions
-      sessionId: sessionId || undefined // Include session ID for reference
+      user_id: userId,
+      sessionId: sessionId || undefined
     };
     
     // Add to UI immediately
     setMessages(prevMessages => [...prevMessages, systemMessage]);
     
-    // For system messages, we no longer need to save to DB
-    // Just display locally - removes permission errors
-    console.log(`Adding local system message: "${text}"`);
-    
     // Only attempt to save to DB if we have an active chat with a partner
     if (sessionId && status === 'chatting' && partnerId) {
       try {
-        console.log(`Attempting to save system message to session ${sessionId}`);
-        // Fire and forget - the local message is already displayed
-        anonChat.sendMessage(sessionId, text, true).catch(error => {
+        enhancedAnonChat.sendMessage(sessionId, text, true).catch(error => {
           console.error("Error adding system message to DB:", error);
-          // Even if remote save fails, local message is already displayed
         });
       } catch (error) {
         console.error("Error calling sendMessage:", error);
@@ -139,7 +134,7 @@ function ChatRoomContent() {
     }
     
     // Set up new listener
-    const unsubscribe = anonChat.setupMessagesListener(sessionId, (newMessages) => {
+    const unsubscribe = enhancedAnonChat.setupMessagesListener(sessionId, (newMessages) => {
       setMessages(newMessages);
     });
     
@@ -148,7 +143,13 @@ function ChatRoomContent() {
 
   // Set up listener for session changes
   const setupSessionListener = useCallback((sessionId: string) => {
-    const unsubscribe = anonChat.setupSessionListener(sessionId, (session) => {
+    // Clean up any existing listener
+    if (sessionListenerRef.current) {
+      sessionListenerRef.current();
+      sessionListenerRef.current = null;
+    }
+    
+    const unsubscribe = enhancedAnonChat.setupSessionListener(sessionId, (session) => {
       // Update our state based on session changes
       setStatus(session.status as 'connecting' | 'waiting' | 'chatting' | 'disconnected');
       
@@ -178,6 +179,25 @@ function ChatRoomContent() {
         if (session.status === 'disconnected' && status !== 'disconnected') {
           setPartnerStatus('offline');
           addSystemMessage("Chat telah berakhir.");
+          
+          // Stop retrying
+          setRetryCount(0);
+          setIsReconnecting(false);
+          
+          // Clear intervals
+          if (messageSearchIntervalRef.current) {
+            clearInterval(messageSearchIntervalRef.current);
+            messageSearchIntervalRef.current = null;
+          }
+        }
+        
+        // If session changed from chatting to waiting (reconnect scenario)
+        if (session.status === 'waiting' && status === 'chatting') {
+          setPartnerStatus('offline');
+          addSystemMessage("Lawan bicara terputus. Mencari lawan bicara baru...");
+          
+          // Start searching for a new partner
+          startPartnerSearch(sessionId);
         }
       }
     });
@@ -192,186 +212,298 @@ function ChatRoomContent() {
       clearInterval(heartbeatIntervalRef.current);
     }
     
-    // Set up heartbeat interval
+    // Set up heartbeat interval (every 5 seconds)
     heartbeatIntervalRef.current = setInterval(async () => {
       try {
         // Update our heartbeat
-        await anonChat.updateSessionHeartbeat(sessionId);
+        await enhancedAnonChat.updateSessionHeartbeat(sessionId);
         
         // Check if partner is still active
-        if (partnerId) {
-          const partnerActivity = await anonChat.checkPartnerActivity(partnerId, userId);
+        if (partnerId && status === 'chatting') {
+          const partnerActivity = await enhancedAnonChat.checkPartnerActivity(partnerId, userId);
           
-          if (!partnerActivity.isActive) {
+          if (!partnerActivity.isActive && !isReconnecting) {
             setPartnerStatus('offline');
             
-            if (status !== 'disconnected') {
-              setStatus('disconnected');
-              addSystemMessage("Lawan bicara telah terputus.");
+            if (status === 'chatting') {
+              // If partner inactive, try to reconnect to a new partner
+              addSystemMessage("Lawan bicara terputus. Mencari lawan bicara baru...");
+              
+              // Set reconnecting state
+              setIsReconnecting(true);
+              
+              // Recover session and look for a new partner
+              const recovered = await enhancedAnonChat.recoverSession(sessionId);
+              if (recovered) {
+                startPartnerSearch(sessionId);
+              } else {
+                setStatus('disconnected');
+                addSystemMessage("Tidak dapat terhubung kembali. Silakan coba lagi nanti.");
+              }
             }
           }
         }
       } catch (error) {
         console.error("Error in heartbeat:", error);
       }
-    }, 10000); // every 10 seconds
+    }, 5000);
     
     // Also update immediately
-    anonChat.updateSessionHeartbeat(sessionId).catch(error => {
+    enhancedAnonChat.updateSessionHeartbeat(sessionId).catch(error => {
       console.error("Error updating initial heartbeat:", error);
     });
-  }, [partnerId, status, userId, addSystemMessage]);
+  }, [partnerId, status, userId, addSystemMessage, isReconnecting]);
 
-  // Find a partner for chat
-  const findPartner = useCallback(async (currentSessionId: string) => {
-    try {
-      // Find a partner using our helper
-      const result = await anonChat.findChatPartner(currentSessionId, gender, lookingFor);
-      
-      if (result.partnerId && result.partnerSessionId) {
-        // Connect with the partner
-        const success = await anonChat.connectChatPartners(
-          currentSessionId,
-          result.partnerId,
-          result.partnerSessionId
-        );
-        
-        if (success) {
-          // Set up chat state
-          setPartnerId(result.partnerId);
-          setStatus('chatting');
-          
-          // Add system message
-          addSystemMessage("Terhubung! Silakan mulai chat.");
-          
-          // Set up messages listener if not already set
-          setupMessagesListener(currentSessionId);
+  // Start the partner search process
+  const startPartnerSearch = useCallback((sessionId: string) => {
+    // Clear any existing search interval
+    if (messageSearchIntervalRef.current) {
+      clearInterval(messageSearchIntervalRef.current);
+    }
+    
+    // Set up search interval (every 3 seconds)
+    messageSearchIntervalRef.current = setInterval(async () => {
+      if (status !== 'waiting') {
+        // If not waiting anymore, stop searching
+        if (messageSearchIntervalRef.current) {
+          clearInterval(messageSearchIntervalRef.current);
+          messageSearchIntervalRef.current = null;
         }
-      } else {
-        // No partner found, check again in a few seconds
-        setTimeout(() => {
-          if (status === 'waiting' && sessionId === currentSessionId) {
-            findPartner(currentSessionId);
-          }
-        }, 3000);
-      }
-    } catch (error) {
-      console.error("Error finding partner:", error);
-      addSystemMessage("Terjadi kesalahan saat mencari lawan bicara. Silakan coba lagi.");
-    }
-  }, [gender, lookingFor, sessionId, status, addSystemMessage, setupMessagesListener]);
-
-  // Create a new chat session
-  const createNewSession = useCallback(async () => {
-    try {
-      // Create new session in Firestore
-      const newSessionId = await anonChat.createChatSession(gender, lookingFor);
-      
-      if (!newSessionId) {
-        throw new Error("Failed to create session");
-      }
-      
-      setSessionId(newSessionId);
-      setStatus('waiting');
-      
-      // Add system message
-      addSystemMessage("Mencari lawan bicara untukmu...");
-      
-      // Start heartbeat
-      startHeartbeat(newSessionId);
-      
-      // Set up session listener
-      setupSessionListener(newSessionId);
-      
-      // Start matching process
-      findPartner(newSessionId);
-    } catch (error) {
-      console.error("Error creating session:", error);
-      setErrorMessage("Could not create chat session. Please try again later.");
-      setStatus('disconnected');
-    }
-  }, [gender, lookingFor, addSystemMessage, startHeartbeat, setupSessionListener, findPartner]);
-
-  // Resume an existing session
-  const resumeExistingSession = useCallback(async (sessionId: string) => {
-    try {
-      setSessionId(sessionId);
-      
-      // Add system message
-      addSystemMessage("Menghubungkan kembali ke chat...");
-      
-      // Set up session listener
-      setupSessionListener(sessionId);
-      
-      // Set up messages listener
-      setupMessagesListener(sessionId);
-      
-      // Start heartbeat
-      startHeartbeat(sessionId);
-    } catch (error) {
-      console.error("Error resuming session:", error);
-      setErrorMessage("Could not resume chat session. Starting a new one...");
-      createNewSession();
-    }
-  }, [addSystemMessage, setupSessionListener, setupMessagesListener, startHeartbeat, createNewSession]);
-
-  // Initialize session - either create a new one or join existing
-  const initializeSession = useCallback(async () => {
-    try {
-      // Store user identifiers
-      const userData = userIdentifier.storeUserIdentifiers();
-      if (!userData) {
-        setErrorMessage("Could not initialize user data. Please try again.");
         return;
       }
-      
-      // Check if this is a duplicate connection
-      const sessionParam = searchParams.get('session');
-      if (sessionParam && userIdentifier.isConnectionActive(sessionParam)) {
-        setErrorMessage("Chat already open in another tab. Please use that instance.");
-        setStatus('disconnected');
-        return;
-      }
-
-      // Clear any existing error messages
-      setErrorMessage(null);
       
       try {
-        // Check if session ID is provided in URL
-        if (sessionParam) {
-          // Try to resume existing session
-          await resumeExistingSession(sessionParam);
-          return;
-        }
+        // Find a partner using our helper
+        const result = await enhancedAnonChat.findChatPartner(sessionId, gender, lookingFor);
         
-        // Check if we have an active session
-        const activeSession = await anonChat.findActiveSession(userId);
-        
-        if (activeSession && activeSession.session_id) {
-          // Resume existing session
-          await resumeExistingSession(activeSession.session_id);
+        if (result.partnerId && result.partnerSessionId) {
+          // Connect with the partner
+          const success = await enhancedAnonChat.connectChatPartners(
+            sessionId,
+            result.partnerId,
+            result.partnerSessionId
+          );
+          
+          if (success) {
+            // Clear search interval
+            if (messageSearchIntervalRef.current) {
+              clearInterval(messageSearchIntervalRef.current);
+              messageSearchIntervalRef.current = null;
+            }
+            
+            // Set up chat state
+            setPartnerId(result.partnerId);
+            setStatus('chatting');
+            setIsReconnecting(false);
+            
+            // Add system message
+            addSystemMessage("Terhubung! Silakan mulai chat.");
+            
+            // Set up messages listener if not already set
+            setupMessagesListener(sessionId);
+          }
         } else {
-          // Create a new session
-          await createNewSession();
+          // Increment retry count every 3 attempts (9 seconds)
+          if (retryCount % 3 === 0) {
+            addSystemMessage(`Masih mencari lawan bicara... (${Math.floor(retryCount/3) + 1})`);
+          }
+          setRetryCount(prev => prev + 1);
         }
-      } catch (connectionError) {
-        console.error("Connection error:", connectionError);
-        setErrorMessage("Connection to the chat server was lost. Please refresh and try again.");
+      } catch (error) {
+        console.error("Error finding partner:", error);
+      }
+    }, 3000);
+    
+    // Also do an immediate search
+    enhancedAnonChat.findChatPartner(sessionId, gender, lookingFor)
+      .then(result => {
+        if (result.partnerId && result.partnerSessionId) {
+          enhancedAnonChat.connectChatPartners(
+            sessionId,
+            result.partnerId,
+            result.partnerSessionId
+          ).then(success => {
+            if (success) {
+              // Clear search interval
+              if (messageSearchIntervalRef.current) {
+                clearInterval(messageSearchIntervalRef.current);
+                messageSearchIntervalRef.current = null;
+              }
+              
+              // Set up chat state
+              setPartnerId(result.partnerId);
+              setStatus('chatting');
+              setIsReconnecting(false);
+              
+              // Add system message
+              addSystemMessage("Terhubung! Silakan mulai chat.");
+              
+              // Set up messages listener
+              setupMessagesListener(sessionId);
+            }
+          }).catch(error => {
+            console.error("Error connecting to partner:", error);
+          });
+        }
+      })
+      .catch(error => {
+        console.error("Error in initial partner search:", error);
+      });
+  }, [status, gender, lookingFor, retryCount, setupMessagesListener, addSystemMessage, isReconnecting]);
+
+  // Handle creating a new session or using an existing one
+  useEffect(() => {
+    async function initializeSession() {
+      try {
+        // Use existing session ID if provided in URL
+        if (initialSessionId) {
+          setSessionId(initialSessionId);
+          setStatus('waiting');
+          addSystemMessage("Memuat sesi chat yang ada...");
+          
+          // Set up session listener
+          setupSessionListener(initialSessionId);
+          
+          // Start heartbeat
+          startHeartbeat(initialSessionId);
+          
+          // Check session status and start search if needed
+          const session = await enhancedAnonChat.findActiveSession(userId);
+          if (session && session.status === 'waiting') {
+            addSystemMessage("Mencari lawan bicara...");
+            startPartnerSearch(initialSessionId);
+          } else if (session && session.status === 'chatting' && session.partner_id) {
+            // Already in an active chat, set up messages listener
+            setPartnerId(session.partner_id);
+            setStatus('chatting');
+            setupMessagesListener(initialSessionId);
+            addSystemMessage("Melanjutkan percakapan...");
+          }
+        } 
+        // Create a new session
+        else if (gender && lookingFor) {
+          addSystemMessage("Membuat sesi chat baru...");
+          
+          const sessionId = await enhancedAnonChat.createChatSession(gender, lookingFor);
+          
+          if (sessionId) {
+            setSessionId(sessionId);
+            setStatus('waiting');
+            
+            // Set up session listener
+            setupSessionListener(sessionId);
+            
+            // Start heartbeat
+            startHeartbeat(sessionId);
+            
+            // Start search for partner
+            addSystemMessage("Mencari lawan bicara...");
+            startPartnerSearch(sessionId);
+          } else {
+            setErrorMessage("Gagal membuat sesi chat. Silakan coba lagi.");
+            setStatus('disconnected');
+          }
+        } else {
+          setErrorMessage("Informasi gender atau preferensi tidak lengkap.");
+          setStatus('disconnected');
+        }
+      } catch (error) {
+        console.error("Error initializing session:", error);
+        setErrorMessage("Terjadi kesalahan saat memulai chat. Silakan coba lagi.");
         setStatus('disconnected');
       }
-    } catch (error) {
-      console.error("Error initializing session:", error);
-      setErrorMessage("Could not connect to chat. Please try again later.");
-      setStatus('disconnected');
     }
-  }, [searchParams, userId, resumeExistingSession, createNewSession]);
-
-  // Setup chat session and listeners on component mount
-  useEffect(() => {
+    
     initializeSession();
-
+    
+    // Cleanup function
     return () => {
-      // Clean up listeners and intervals on unmount
+      // Clean up listeners
+      if (messagesListenerRef.current) {
+        messagesListenerRef.current();
+      }
+      
+      if (sessionListenerRef.current) {
+        sessionListenerRef.current();
+      }
+      
+      // Clean up intervals
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+      }
+      
+      if (messageSearchIntervalRef.current) {
+        clearInterval(messageSearchIntervalRef.current);
+      }
+    };
+  }, [initialSessionId, gender, lookingFor, userId, setupSessionListener, startHeartbeat, startPartnerSearch, addSystemMessage, setupMessagesListener]);
+  
+  // Send message handler
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !sessionId) return;
+    
+    const text = newMessage.trim();
+    setNewMessage('');
+    
+    // Optimistically add message to UI
+    const optimisticId = `temp-${Date.now()}`;
+    const optimisticMessage = {
+      id: optimisticId,
+      text,
+      senderId: userId,
+      timestamp: new Date(),
+      isSystemMessage: false
+    };
+    
+    setMessages(prev => [...prev, optimisticMessage]);
+    
+    // Send message to server
+    try {
+      const messageId = await enhancedAnonChat.sendMessage(sessionId, text);
+      
+      // Replace optimistic message with real one (if needed)
+      // This is handled by the messages listener in most cases
+    } catch (error) {
+      console.error("Error sending message:", error);
+      
+      // Show error message
+      addSystemMessage("Pesan gagal terkirim. Silakan coba lagi.");
+    }
+    
+    // Focus on input field
+    if (messageInputRef.current) {
+      messageInputRef.current.focus();
+    }
+  };
+  
+  // Handle input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewMessage(e.target.value);
+  };
+  
+  // Handle key press
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Send message on Enter (without shift)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+  
+  // End chat handler
+  const handleEndChat = async () => {
+    if (!sessionId) return;
+    
+    try {
+      // Update UI immediately
+      setStatus('disconnected');
+      setPartnerStatus('offline');
+      addSystemMessage("Anda telah mengakhiri chat.");
+      
+      // End the session
+      await enhancedAnonChat.endChatSession(sessionId);
+      
+      // Clean up listeners
       if (messagesListenerRef.current) {
         messagesListenerRef.current();
         messagesListenerRef.current = null;
@@ -382,309 +514,156 @@ function ChatRoomContent() {
         sessionListenerRef.current = null;
       }
       
+      // Clean up intervals
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
       }
       
-      // Update session status to disconnected when leaving
-      if (sessionId && status !== 'disconnected') {
-        console.log(`Component unmounting, ending session ${sessionId}`);
-        anonChat.endChatSession(sessionId).catch(err => {
-          console.warn(`Error ending session on unmount: ${err}`);
-        });
+      if (messageSearchIntervalRef.current) {
+        clearInterval(messageSearchIntervalRef.current);
+        messageSearchIntervalRef.current = null;
       }
-    };
-  }, [initializeSession, sessionId, status]);
-
-  // Send a message
-  const sendMessage = useCallback(async () => {
-    if (!newMessage.trim() || !sessionId || status !== 'chatting') return;
-    
-    try {
-      await anonChat.sendMessage(sessionId, newMessage.trim());
-      setNewMessage('');
-      
-      // Focus back on input
-      messageInputRef.current?.focus();
-    } catch (error) {
-      console.error("Error sending message:", error);
-      setErrorMessage("Could not send message. Please try again.");
-    }
-  }, [newMessage, sessionId, status, setNewMessage, setErrorMessage]);
-
-  // End chat session
-  const endChat = useCallback(async () => {
-    if (!sessionId) return;
-    
-    try {
-      console.log(`Ending chat session: ${sessionId}`);
-      
-      // Only try to end the session if we're not already disconnected
-      if (status !== 'disconnected') {
-        // Update session status
-        const success = await anonChat.endChatSession(sessionId);
-        
-        if (success) {
-          // Add system message
-          addSystemMessage("Chat telah berakhir.");
-          
-          // Update UI state
-          setStatus('disconnected');
-        }
-      } else {
-        console.log("Session already disconnected, skipping endChatSession call");
-      }
-      
-      // Redirect after a short delay
-      setTimeout(() => {
-        router.push('/mini-games/anon-chat');
-      }, 1500);
     } catch (error) {
       console.error("Error ending chat:", error);
-      
-      // Still update the UI even if the server call failed
-      setStatus('disconnected');
-      addSystemMessage("Chat telah berakhir.");
-      
-      // Redirect after a short delay
-      setTimeout(() => {
-        router.push('/mini-games/anon-chat');
-      }, 1500);
     }
-  }, [sessionId, status, addSystemMessage, router]);
+  };
+  
+  // Start new chat handler
+  const handleStartNewChat = () => {
+    router.push('/mini-games/anon-chat');
+  };
 
-  // Start a new chat
-  const startNewChat = useCallback(() => {
-    // Reset state first to start UI update
-    setMessages([]);
-    setNewMessage('');
-    setPartnerId(null);
-    setStatus('connecting');
-    setPartnerStatus('online');
-    
-    // Clean up current session if it exists
-    if (sessionId) {
-      console.log(`Starting new chat, ending previous session ${sessionId}`);
-      
-      // End previous session, but don't block UI on this
-      anonChat.endChatSession(sessionId).catch(error => {
-        console.warn(`Error ending previous session: ${error}`);
-        // Continue anyway
-      });
-    }
-    
-    // Clean up listeners
-    if (messagesListenerRef.current) {
-      messagesListenerRef.current();
-      messagesListenerRef.current = null;
-    }
-    
-    if (sessionListenerRef.current) {
-      sessionListenerRef.current();
-      sessionListenerRef.current = null;
-    }
-    
-    if (heartbeatIntervalRef.current) {
-      clearInterval(heartbeatIntervalRef.current);
-      heartbeatIntervalRef.current = null;
-    }
-    
-    // Clear session ID to prevent any operations on old session
-    setSessionId(null);
-    
-    // Initialize new session
-    setTimeout(() => {
-      // Small delay to ensure UI has updated and old session operations are complete
-      createNewSession();
-    }, 100);
-  }, [sessionId, createNewSession]);
-
-  // Handle message input key press
-  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }, [sendMessage]);
-
+  // Render based on status
   return (
     <div className="min-h-screen flex flex-col bg-black">
       <Navbar />
       
-      <div className="flex-grow max-w-4xl w-full mx-auto px-4 pt-24 pb-16">
-        <div className="bg-gradient-to-br from-green-900/40 to-black border border-green-500/30 rounded-2xl h-full flex flex-col">
-          {/* Chat header */}
-          <div className="px-4 py-3 border-b border-green-500/30 flex justify-between items-center">
-            <div className="flex items-center">
-              <h2 className="text-xl font-semibold text-white">Anon Chat</h2>
-              <div className="ml-4 flex items-center">
-                {status === 'chatting' && (
-                  <span className="flex items-center text-sm text-gray-300">
-                    <span className={`w-2 h-2 rounded-full mr-2 ${
-                      partnerStatus === 'online' ? 'bg-green-500' : 'bg-red-500'
-                    }`}></span>
-                    {partnerStatus === 'online' ? 'Online' : 'Offline'}
-                  </span>
-                )}
-                {status === 'waiting' && (
-                  <span className="flex items-center text-sm text-yellow-400">
-                    <span className="w-2 h-2 rounded-full bg-yellow-400 mr-2 animate-pulse"></span>
-                    Mencari...
-                  </span>
-                )}
-                {status === 'disconnected' && (
-                  <span className="flex items-center text-sm text-gray-400">
-                    <span className="w-2 h-2 rounded-full bg-gray-400 mr-2"></span>
-                    Terputus
-                  </span>
-                )}
-                {status === 'connecting' && (
-                  <span className="flex items-center text-sm text-blue-400">
-                    <span className="w-2 h-2 rounded-full bg-blue-400 mr-2 animate-pulse"></span>
-                    Menghubungkan...
-                  </span>
-                )}
+      <div className="flex-grow max-w-4xl w-full mx-auto px-4 pt-24 pb-16 flex flex-col">
+        <div className="bg-gradient-to-br from-green-900/40 to-black border border-green-500/30 rounded-2xl p-6 flex-grow flex flex-col">
+          {/* Header with status */}
+          <div className="flex justify-between items-center mb-6 pb-4 border-b border-green-500/30">
+            <div>
+              <h2 className="text-2xl font-bold text-white">Anon Chat</h2>
+              <div className="flex items-center mt-1">
+                <div className={`w-2 h-2 rounded-full mr-2 ${
+                  status === 'chatting' 
+                    ? 'bg-green-500' 
+                    : status === 'waiting' 
+                      ? 'bg-yellow-500' 
+                      : 'bg-red-500'
+                }`}></div>
+                <p className="text-gray-300 text-sm">
+                  {status === 'connecting' && 'Menyambungkan...'}
+                  {status === 'waiting' && 'Mencari lawan bicara...'}
+                  {status === 'chatting' && 'Terhubung'}
+                  {status === 'disconnected' && 'Terputus'}
+                </p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-2">
-              {status === 'chatting' && (
-                <button 
-                  onClick={endChat}
-                  className="text-red-400 hover:text-red-300 transition-colors text-sm flex items-center"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Akhiri
-                </button>
-              )}
-              {status === 'waiting' && (
-                <button 
-                  onClick={endChat}
-                  className="text-yellow-400 hover:text-yellow-300 transition-colors text-sm flex items-center"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Berhenti Mencari
-                </button>
-              )}
-              {status === 'disconnected' && (
-                <button 
-                  onClick={startNewChat}
-                  className="text-green-400 hover:text-green-300 transition-colors text-sm flex items-center"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Chat Baru
-                </button>
-              )}
-              <Link 
-                href="/mini-games/anon-chat" 
-                className="text-gray-400 hover:text-white transition-colors text-sm flex items-center"
+            {status !== 'disconnected' ? (
+              <button 
+                onClick={handleEndChat}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                Kembali
-              </Link>
-            </div>
+                Akhiri Chat
+              </button>
+            ) : (
+              <button 
+                onClick={handleStartNewChat}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+              >
+                Chat Baru
+              </button>
+            )}
           </div>
           
-          {/* Messages area */}
-          <div className="flex-grow overflow-y-auto p-4 space-y-3" style={{ overscrollBehavior: 'contain' }}>
-            {messages.map((message) => (
-              <div 
-                key={message.id || `msg-${Date.now()}-${Math.random()}`}
-                className={`max-w-[80%] ${
-                  message.isSystemMessage 
-                    ? 'mx-auto text-center' 
-                    : message.senderId === userId 
-                      ? 'ml-auto' 
-                      : 'mr-auto'
-                }`}
+          {/* Error message */}
+          {errorMessage && (
+            <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 mb-6 text-white">
+              <p>{errorMessage}</p>
+              <button 
+                onClick={handleStartNewChat}
+                className="mt-2 px-4 py-2 bg-white text-red-600 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                {message.isSystemMessage ? (
-                  <div className="bg-gray-800/50 text-gray-300 text-sm py-1 px-3 rounded-md inline-block">
-                    {message.text}
+                Kembali
+              </button>
+            </div>
+          )}
+          
+          {/* Chat messages */}
+          <div className="flex-grow overflow-y-auto mb-4 space-y-3 pb-2" style={{ maxHeight: 'calc(100vh - 350px)' }}>
+            {messages.map((message) => (
+              <div key={message.id} className={`flex ${message.senderId === userId ? 'justify-end' : message.senderId === 'system' ? 'justify-center' : 'justify-start'}`}>
+                {message.senderId === 'system' ? (
+                  <div className="bg-gray-800/50 px-4 py-2 rounded-lg max-w-[80%]">
+                    <p className="text-gray-300 text-sm">{message.text}</p>
                   </div>
                 ) : (
-                  <div 
-                    className={`py-2 px-3 rounded-lg ${
-                      message.senderId === userId 
-                        ? 'bg-green-600/40 text-white' 
-                        : 'bg-zinc-800 text-gray-200'
-                    }`}
-                  >
-                    {message.text}
-                    <div 
-                      className={`text-xs mt-1 ${
-                        message.senderId === userId 
-                          ? 'text-green-300/60' 
-                          : 'text-gray-400'
-                      }`}
-                    >
+                  <div className={`px-4 py-3 rounded-lg max-w-[80%] ${
+                    message.senderId === userId 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-700 text-gray-100'
+                  }`}>
+                    <p>{message.text}</p>
+                    <p className="text-xs opacity-75 mt-1 text-right">
                       {formatTime(message.timestamp)}
-                    </div>
+                    </p>
                   </div>
                 )}
               </div>
             ))}
-            <div ref={messagesEndRef} className="h-1" />
+            <div ref={messagesEndRef} />
           </div>
           
           {/* Message input */}
-          <div className="p-3 border-t border-green-500/30">
-            {errorMessage && (
-              <div className="bg-red-900/60 border border-red-500/50 text-white text-sm py-2 px-3 rounded mb-3">
-                {errorMessage}
-              </div>
-            )}
+          <div className={`mt-auto ${status !== 'chatting' ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="flex items-end">
+              <textarea 
+                ref={messageInputRef}
+                className="flex-grow bg-gray-800 text-white border border-green-500/30 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder={status === 'chatting' ? "Ketik pesan..." : "Menunggu koneksi..."}
+                rows={2}
+                value={newMessage}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                disabled={status !== 'chatting'}
+              />
+              <button 
+                onClick={handleSendMessage}
+                disabled={status !== 'chatting'}
+                className="ml-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
             
-            {status === 'chatting' ? (
-              <div className="flex">
-                <textarea
-                  ref={messageInputRef}
-                  className="flex-grow bg-zinc-800 text-white border-none rounded-l-lg p-2 focus:outline-none focus:ring-1 focus:ring-green-500/50 resize-none"
-                  placeholder="Ketik pesan..."
-                  rows={1}
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                />
-                <motion.button
-                  onClick={sendMessage}
-                  whileTap={{ scale: 0.95 }}
-                  className="bg-green-600 hover:bg-green-500 text-white px-4 rounded-r-lg transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                </motion.button>
-              </div>
-            ) : status === 'waiting' ? (
-              <div className="bg-yellow-900/30 border border-yellow-500/30 text-yellow-300 py-2 px-3 rounded text-center">
-                Sedang mencari lawan bicara untukmu... Mohon tunggu.
-              </div>
-            ) : status === 'disconnected' ? (
-              <div className="bg-gray-800/50 text-gray-300 py-2 px-3 rounded text-center">
-                Chat telah berakhir. 
-                <button 
-                  onClick={startNewChat}
-                  className="text-green-400 hover:text-green-300 ml-2 transition-colors"
-                >
-                  Mulai chat baru
-                </button>
-              </div>
-            ) : (
-              <div className="bg-blue-900/30 border border-blue-500/30 text-blue-300 py-2 px-3 rounded text-center">
-                Menghubungkan ke server...
-              </div>
-            )}
+            <div className="mt-2 text-xs text-gray-400 flex justify-between">
+              <span>
+                {partnerStatus === 'typing' && status === 'chatting' && 'Lawan bicara sedang mengetik...'}
+                {partnerStatus === 'offline' && status === 'chatting' && 'Lawan bicara terputus...'}
+              </span>
+              <span>
+                {status === 'chatting' && 'Enter = kirim, Shift+Enter = baris baru'}
+              </span>
+            </div>
           </div>
+          
+          {/* Disconnected state info */}
+          {status === 'disconnected' && !errorMessage && (
+            <div className="text-center my-8">
+              <p className="text-gray-300 mb-6">Chat telah berakhir</p>
+              <button 
+                onClick={handleStartNewChat}
+                className="px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:opacity-90 transition-all"
+              >
+                Mulai Chat Baru
+              </button>
+            </div>
+          )}
         </div>
       </div>
       
@@ -693,8 +672,8 @@ function ChatRoomContent() {
   );
 }
 
-// The main component that wraps the ChatRoom with suspense
-export default function AnonChatRoom() {
+// Main component with Suspense
+export default function ChatRoomPage() {
   return (
     <Suspense fallback={<ChatRoomLoading />}>
       <ChatRoomContent />
