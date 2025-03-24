@@ -42,7 +42,7 @@ Fungsi:
 - Menghapus subcollection messages dalam chatRooms
 
 ### 2. Browser Storage Cleaner
-firebase deploy --only firestore:rules --project sosmed-34308
+firebase deploy --only firestore:rules,firestore:indexes --project sosmed-34308
 Endpoint: `/api/dev/clear-browser-storage?token=dev-debug-token`
 
 Fungsi:

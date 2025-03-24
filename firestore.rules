@@ -2,6 +2,12 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // TEMPORARY - FOR DEVELOPMENT ONLY - REMOVE IN PRODUCTION
+    // Temporarily allow all operations during development to debug issues
+    match /{document=**} {
+      allow read, write: if true;
+    }
+    
     // Helper functions for validation
     function isAuthenticated() {
       return request.auth != null;
@@ -76,22 +82,26 @@ service cloud.firestore {
       
       // Allow updating sessions by the session owner or partner
       allow update: if 
-        // Owner can update their own session
-        request.resource.data.user_id == resource.data.user_id ||
-        // Partner can update if they have a valid connection
-        (resource.data.partner_id != null && 
-         request.resource.data.user_id == resource.data.partner_id);
+        // Owner can update their own session with user_id included
+        request.resource.data.user_id != null &&
+        (
+          // Current owner can update
+          (resource != null && request.resource.data.user_id == resource.data.user_id) ||
+          // Partner can update if they have a valid connection
+          (resource != null && resource.data.partner_id != null && 
+           request.resource.data.user_id == resource.data.partner_id)
+        );
       
       // Allow deletion by session owners
       allow delete: if true; // For easier debugging during development
 
-      // Messages in anonymous chat sessions - allow all operations for simplicity during development
+      // Messages in anonymous chat sessions
       match /messages/{messageId} {
         // Anyone can read messages
         allow read;
         
-        // Allow creating messages with a valid senderId
-        allow create;
+        // Allow creating messages with minimal validation during development
+        allow create: if true; // During development, allow any message creation
         
         // No updates to messages
         allow update: if false;

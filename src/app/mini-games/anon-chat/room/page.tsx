@@ -97,23 +97,38 @@ function ChatRoomContent() {
     // Generate a truly unique ID with a timestamp plus random string
     const uniqueId = `system-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
     
+    // Create the system message
     const systemMessage: ChatMessage = {
       id: uniqueId,
       text,
       senderId: 'system',
       timestamp: new Date(),
-      isSystemMessage: true
+      isSystemMessage: true,
+      user_id: userId, // Include user ID for permissions
+      sessionId: sessionId || undefined // Include session ID for reference
     };
     
+    // Add to UI immediately
     setMessages(prevMessages => [...prevMessages, systemMessage]);
     
-    // Save to DB if we have a session ID
-    if (sessionId) {
-      anonChat.sendMessage(sessionId, text, true).catch(error => {
-        console.error("Error adding system message:", error);
-      });
+    // For system messages, we no longer need to save to DB
+    // Just display locally - removes permission errors
+    console.log(`Adding local system message: "${text}"`);
+    
+    // Only attempt to save to DB if we have an active chat with a partner
+    if (sessionId && status === 'chatting' && partnerId) {
+      try {
+        console.log(`Attempting to save system message to session ${sessionId}`);
+        // Fire and forget - the local message is already displayed
+        anonChat.sendMessage(sessionId, text, true).catch(error => {
+          console.error("Error adding system message to DB:", error);
+          // Even if remote save fails, local message is already displayed
+        });
+      } catch (error) {
+        console.error("Error calling sendMessage:", error);
+      }
     }
-  }, [sessionId]);
+  }, [sessionId, userId, status, partnerId]);
 
   // Set up listener for messages
   const setupMessagesListener = useCallback((sessionId: string) => {
@@ -317,23 +332,32 @@ function ChatRoomContent() {
         setStatus('disconnected');
         return;
       }
+
+      // Clear any existing error messages
+      setErrorMessage(null);
       
-      // Check if session ID is provided in URL
-      if (sessionParam) {
-        // Try to resume existing session
-        await resumeExistingSession(sessionParam);
-        return;
-      }
-      
-      // Check if we have an active session
-      const activeSession = await anonChat.findActiveSession(userId);
-      
-      if (activeSession && activeSession.session_id) {
-        // Resume existing session
-        await resumeExistingSession(activeSession.session_id);
-      } else {
-        // Create a new session
-        await createNewSession();
+      try {
+        // Check if session ID is provided in URL
+        if (sessionParam) {
+          // Try to resume existing session
+          await resumeExistingSession(sessionParam);
+          return;
+        }
+        
+        // Check if we have an active session
+        const activeSession = await anonChat.findActiveSession(userId);
+        
+        if (activeSession && activeSession.session_id) {
+          // Resume existing session
+          await resumeExistingSession(activeSession.session_id);
+        } else {
+          // Create a new session
+          await createNewSession();
+        }
+      } catch (connectionError) {
+        console.error("Connection error:", connectionError);
+        setErrorMessage("Connection to the chat server was lost. Please refresh and try again.");
+        setStatus('disconnected');
       }
     } catch (error) {
       console.error("Error initializing session:", error);
@@ -348,16 +372,30 @@ function ChatRoomContent() {
 
     return () => {
       // Clean up listeners and intervals on unmount
-      if (messagesListenerRef.current) messagesListenerRef.current();
-      if (sessionListenerRef.current) sessionListenerRef.current();
-      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+      if (messagesListenerRef.current) {
+        messagesListenerRef.current();
+        messagesListenerRef.current = null;
+      }
+      
+      if (sessionListenerRef.current) {
+        sessionListenerRef.current();
+        sessionListenerRef.current = null;
+      }
+      
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
       
       // Update session status to disconnected when leaving
-      if (sessionId) {
-        anonChat.endChatSession(sessionId);
+      if (sessionId && status !== 'disconnected') {
+        console.log(`Component unmounting, ending session ${sessionId}`);
+        anonChat.endChatSession(sessionId).catch(err => {
+          console.warn(`Error ending session on unmount: ${err}`);
+        });
       }
     };
-  }, [initializeSession, sessionId]);
+  }, [initializeSession, sessionId, status]);
 
   // Send a message
   const sendMessage = useCallback(async () => {
@@ -376,50 +414,91 @@ function ChatRoomContent() {
   }, [newMessage, sessionId, status, setNewMessage, setErrorMessage]);
 
   // End chat session
-  const endChat = async () => {
+  const endChat = useCallback(async () => {
     if (!sessionId) return;
     
     try {
-      // Update session status
-      await anonChat.endChatSession(sessionId);
+      console.log(`Ending chat session: ${sessionId}`);
       
-      // Add system message
-      addSystemMessage("Chat telah berakhir.");
+      // Only try to end the session if we're not already disconnected
+      if (status !== 'disconnected') {
+        // Update session status
+        const success = await anonChat.endChatSession(sessionId);
+        
+        if (success) {
+          // Add system message
+          addSystemMessage("Chat telah berakhir.");
+          
+          // Update UI state
+          setStatus('disconnected');
+        }
+      } else {
+        console.log("Session already disconnected, skipping endChatSession call");
+      }
       
-      // Update UI state
-      setStatus('disconnected');
-      
-      // Redirect after 2 seconds
+      // Redirect after a short delay
       setTimeout(() => {
         router.push('/mini-games/anon-chat');
-      }, 2000);
+      }, 1500);
     } catch (error) {
       console.error("Error ending chat:", error);
+      
+      // Still update the UI even if the server call failed
+      setStatus('disconnected');
+      addSystemMessage("Chat telah berakhir.");
+      
+      // Redirect after a short delay
+      setTimeout(() => {
+        router.push('/mini-games/anon-chat');
+      }, 1500);
     }
-  };
+  }, [sessionId, status, addSystemMessage, router]);
 
   // Start a new chat
-  const startNewChat = () => {
-    // Clean up current session
-    if (sessionId) {
-      anonChat.endChatSession(sessionId);
-    }
-    
-    // Clean up listeners
-    if (messagesListenerRef.current) messagesListenerRef.current();
-    if (sessionListenerRef.current) sessionListenerRef.current();
-    if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
-    
-    // Reset state
+  const startNewChat = useCallback(() => {
+    // Reset state first to start UI update
     setMessages([]);
-    setSessionId(null);
+    setNewMessage('');
     setPartnerId(null);
     setStatus('connecting');
     setPartnerStatus('online');
     
+    // Clean up current session if it exists
+    if (sessionId) {
+      console.log(`Starting new chat, ending previous session ${sessionId}`);
+      
+      // End previous session, but don't block UI on this
+      anonChat.endChatSession(sessionId).catch(error => {
+        console.warn(`Error ending previous session: ${error}`);
+        // Continue anyway
+      });
+    }
+    
+    // Clean up listeners
+    if (messagesListenerRef.current) {
+      messagesListenerRef.current();
+      messagesListenerRef.current = null;
+    }
+    
+    if (sessionListenerRef.current) {
+      sessionListenerRef.current();
+      sessionListenerRef.current = null;
+    }
+    
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    
+    // Clear session ID to prevent any operations on old session
+    setSessionId(null);
+    
     // Initialize new session
-    createNewSession();
-  };
+    setTimeout(() => {
+      // Small delay to ensure UI has updated and old session operations are complete
+      createNewSession();
+    }, 100);
+  }, [sessionId, createNewSession]);
 
   // Handle message input key press
   const handleKeyPress = useCallback((e: React.KeyboardEvent) => {

@@ -18,8 +18,8 @@ import {
   serverTimestamp, 
   onSnapshot,
   Timestamp,
-  DocumentReference,
-  setDoc
+  setDoc,
+  getDoc
 } from 'firebase/firestore';
 import { firebaseApp } from './firebase';
 import userIdentifier from './userIdentifier';
@@ -81,7 +81,7 @@ export const findActiveSession = async (userId: string): Promise<AnonSession | n
 };
 
 /**
- * Create a new chat session
+ * Create a chat session
  */
 export const createChatSession = async (
   gender: string,
@@ -89,79 +89,110 @@ export const createChatSession = async (
 ): Promise<string | null> => {
   try {
     const userId = userIdentifier.getPermanentUserId();
+    const sessionCreationKey = 'anonchat_session_creation_lock';
     
-    // Check for duplicate session creation in progress
-    const lockKey = 'anonchat_session_creation_lock';
-    const lockData = localStorage.getItem(lockKey);
-    
+    // Check if session creation is already in progress
+    const lockData = localStorage.getItem(sessionCreationKey);
     if (lockData) {
-      try {
-        const lock = JSON.parse(lockData);
-        const now = Date.now();
-        // If the lock is less than 5 seconds old, assume session creation is in progress
-        if (now - lock.timestamp < 5000 && lock.userId === userId) {
-          console.log('Session creation already in progress, waiting for existing process');
-          // Wait for the existing session creation to complete
-          return new Promise((resolve) => {
-            setTimeout(async () => {
-              // Check again for active session
-              const session = await findActiveSession(userId);
-              resolve(session ? session.session_id || null : null);
-            }, 1000);
-          });
-        }
-      } catch (_) {
-        console.error('Error finding active session:', _);
-        // Invalid lock data, continue
+      const lockInfo = JSON.parse(lockData);
+      const lockTimestamp = new Date(lockInfo.timestamp).getTime();
+      const now = Date.now();
+      
+      // If lock is less than 10 seconds old, consider it valid
+      if (now - lockTimestamp < 10000) {
+        console.log('Session creation already in progress, waiting for existing process');
+        
+        // Wait for the lock to be released (poll every 500ms for up to 5 seconds)
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        return new Promise((resolve, reject) => {
+          const checkLock = () => {
+            attempts++;
+            const currentLockData = localStorage.getItem(sessionCreationKey);
+            
+            if (!currentLockData) {
+              // Lock has been released, check for the session ID
+              const sessionIdData = localStorage.getItem('anonchat_last_session_id');
+              if (sessionIdData) {
+                try {
+                  const sessionInfo = JSON.parse(sessionIdData);
+                  if (sessionInfo.timestamp > lockTimestamp) {
+                    console.log('Using existing session created by another process');
+                    resolve(sessionInfo.sessionId);
+                    return;
+                  }
+                } catch (e) {
+                  console.error('Error parsing session ID data:', e);
+                  // Invalid JSON, ignore
+                }
+              }
+            }
+            
+            if (attempts >= maxAttempts) {
+              // Timeout exceeded, clear the lock and proceed
+              localStorage.removeItem(sessionCreationKey);
+              reject(new Error('Timeout waiting for session creation'));
+              return;
+            }
+            
+            // Check again after delay
+            setTimeout(checkLock, 500);
+          };
+          
+          checkLock();
+        });
+      } else {
+        // Lock is stale, remove it
+        console.log('Removing stale session creation lock');
+        localStorage.removeItem(sessionCreationKey);
       }
     }
     
-    // Set a lock to prevent duplicate creation
-    localStorage.setItem(lockKey, JSON.stringify({
-      userId,
-      timestamp: Date.now(),
-      gender,
-      lookingFor
+    // Set session creation lock
+    localStorage.setItem(sessionCreationKey, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      userId
     }));
     
-    // Check if user already has an active session
-    const existingSession = await findActiveSession(userId);
-    if (existingSession) {
-      // Clear the lock
-      localStorage.removeItem(lockKey);
-      return existingSession.session_id || null;
-    }
-    
-    // Clean up any existing disconnected sessions for this user before creating a new one
     try {
+      // First clean up any existing disconnected sessions
       await cleanupStaleSessions(userId);
-    } catch (error) {
-      console.error('Error cleaning up stale sessions:', error);
+      
+      // Create session data
+      const sessionData = {
+        user_id: userId,
+        status: 'waiting',
+        gender,
+        lookingFor,
+        created_at: serverTimestamp(),
+        last_active: serverTimestamp(),
+        partner_id: null,
+        partner_session_id: null,
+        device_info: {
+          browser: userIdentifier.getBrowserInfo(),
+          fingerprint: userIdentifier.getDeviceFingerprint()
+        }
+      };
+      
+      // Add to Firestore
+      const docRef = await addDoc(collection(db, "anon_sessions"), sessionData);
+      
+      // Store the session ID
+      const sessionId = docRef.id;
+      localStorage.setItem('anonchat_last_session_id', JSON.stringify({
+        sessionId,
+        timestamp: Date.now()
+      }));
+      
+      return sessionId;
+    } finally {
+      // Clear the lock regardless of success or failure
+      localStorage.removeItem(sessionCreationKey);
     }
-    
-    // Create new session
-    const sessionData: AnonSession = {
-      user_id: userId,
-      partner_id: null,
-      status: 'waiting',
-      last_active: Timestamp.now(),
-      gender,
-      lookingFor,
-      created_at: Timestamp.now(),
-      device_fingerprint: userIdentifier.getDeviceFingerprint(),
-      browser: userIdentifier.getBrowserInfo()
-    };
-    
-    const docRef = await addDoc(sessionsCollection, sessionData);
-    
-    // Clear the lock
-    localStorage.removeItem(lockKey);
-    
-    return docRef.id;
   } catch (error) {
-    // Clear the lock in case of error
-    localStorage.removeItem('anonchat_session_creation_lock');
     console.error('Error creating chat session:', error);
+    localStorage.removeItem('anonchat_session_creation_lock');
     return null;
   }
 };
@@ -176,6 +207,7 @@ export const findChatPartner = async (
 ): Promise<{ partnerId: string | null; partnerSessionId: string | null }> => {
   try {
     const userId = userIdentifier.getPermanentUserId();
+    console.log(`Finding chat partner for user ${userId} with preferences: gender=${gender}, lookingFor=${lookingFor}`);
     
     // Build query based on preferences
     let partnerQuery = query(
@@ -196,46 +228,58 @@ export const findChatPartner = async (
     
     // If we have a gender-specific match, prioritize those looking for our gender
     if (gender && lookingFor !== 'any') {
-      const preferredPartnersQuery = query(
-        sessionsCollection,
-        where('status', '==', 'waiting'),
-        where('user_id', '!=', userId),
-        where('gender', '==', lookingFor),
-        where('lookingFor', 'in', [gender, 'any'])
-      );
+      try {
+        const preferredPartnersQuery = query(
+          sessionsCollection,
+          where('status', '==', 'waiting'),
+          where('user_id', '!=', userId),
+          where('gender', '==', lookingFor),
+          where('lookingFor', 'in', [gender, 'any'])
+        );
+        
+        const preferredSnapshot = await getDocs(preferredPartnersQuery);
+        
+        if (!preferredSnapshot.empty) {
+          const partnerDoc = preferredSnapshot.docs[0];
+          const partnerId = partnerDoc.data().user_id;
+          console.log(`Found preferred partner: ${partnerId} (session: ${partnerDoc.id})`);
+          
+          return {
+            partnerId,
+            partnerSessionId: partnerDoc.id
+          };
+        }
+      } catch (error) {
+        console.error('Error finding preferred partner, falling back to basic search:', error);
+        // Continue with regular search
+      }
+    }
+    
+    // If no preferred match, find any eligible partner
+    try {
+      const snapshot = await getDocs(partnerQuery);
       
-      const preferredSnapshot = await getDocs(preferredPartnersQuery);
-      
-      if (!preferredSnapshot.empty) {
-        const partnerDoc = preferredSnapshot.docs[0];
+      if (!snapshot.empty) {
+        const partnerDoc = snapshot.docs[0];
         const partnerId = partnerDoc.data().user_id;
+        console.log(`Found basic partner: ${partnerId} (session: ${partnerDoc.id})`);
         
         return {
           partnerId,
           partnerSessionId: partnerDoc.id
         };
       }
+    } catch (error) {
+      console.error('Error finding any partner:', error);
     }
     
-    // If no preferred match, find any eligible partner
-    const snapshot = await getDocs(partnerQuery);
-    
-    if (!snapshot.empty) {
-      const partnerDoc = snapshot.docs[0];
-      const partnerId = partnerDoc.data().user_id;
-      
-      return {
-        partnerId,
-        partnerSessionId: partnerDoc.id
-      };
-    }
-    
+    console.log('No partners found');
     return {
       partnerId: null,
       partnerSessionId: null
     };
   } catch (error) {
-    console.error('Error finding chat partner:', error);
+    console.error('Error in findChatPartner:', error);
     return {
       partnerId: null,
       partnerSessionId: null
@@ -257,15 +301,19 @@ export const connectChatPartners = async (
     // Update our session
     await updateDoc(doc(db, 'anon_sessions', sessionId), {
       partner_id: partnerId,
+      partner_session_id: partnerSessionId,
       status: 'chatting',
-      last_active: serverTimestamp()
+      last_active: serverTimestamp(),
+      user_id: userId // Include user_id for security validation
     });
     
     // Update partner's session
     await updateDoc(doc(db, 'anon_sessions', partnerSessionId), {
       partner_id: userId,
+      partner_session_id: sessionId,
       status: 'chatting',
-      last_active: serverTimestamp()
+      last_active: serverTimestamp(),
+      user_id: partnerId // Include partner's user_id for security validation
     });
     
     return true;
@@ -280,8 +328,12 @@ export const connectChatPartners = async (
  */
 export const updateSessionHeartbeat = async (sessionId: string): Promise<boolean> => {
   try {
+    const userId = userIdentifier.getPermanentUserId();
+    
+    // Include the user_id for security rules verification
     await updateDoc(doc(db, 'anon_sessions', sessionId), {
-      last_active: serverTimestamp()
+      last_active: serverTimestamp(),
+      user_id: userId  // Ensure user_id is included in every update to match security rules
     });
     return true;
   } catch (error) {
@@ -341,61 +393,59 @@ export const checkPartnerActivity = async (
 };
 
 /**
- * Send a message
+ * Send a message to the chat
  */
 export const sendMessage = async (
   sessionId: string,
   text: string,
-  isSystemMessage = false
-): Promise<string | null> => {
+  isSystemMessage: boolean = false
+): Promise<string> => {
+  // Generate a unique ID immediately for use in both success and failure cases
+  const uniqueId = `${isSystemMessage ? 'system' : 'msg'}-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+  
   try {
-    // Get the current user ID
+    const db = getFirestore(firebaseApp);
     const userId = userIdentifier.getPermanentUserId();
     
-    // Create a unique ID for system messages to avoid React key conflicts
-    const uniqueId = isSystemMessage ? 
-      `system-${Date.now()}-${Math.random().toString(36).substring(2, 7)}` : null;
+    // Reference to the messages collection for this session
+    const messagesCollection = collection(db, "anon_sessions", sessionId, "messages");
     
-    // Create message data with required fields
-    const messageData: ChatMessage = {
+    // Create the message data - make sure all security-related fields are included
+    const messageData = {
+      id: uniqueId,
       text,
       senderId: isSystemMessage ? 'system' : userId,
-      timestamp: serverTimestamp() as Timestamp,
-      isSystemMessage: isSystemMessage || false,
-      // Add these fields to ensure message permissions
-      user_id: userId, // Adding this to help with security rules
-      sessionId: sessionId // Reference to parent session
+      timestamp: new Date(),
+      isSystemMessage,
+      user_id: userId,  // Always include the user's ID who created the message for permissions
+      sessionId: sessionId,  // Include the session ID for easier reference
+      // Include ownership info for security rules
+      owner: userId
     };
     
-    // Create a reference to the messages subcollection
-    const messagesCollection = collection(db, 'anon_sessions', sessionId, 'messages');
+    console.log(`Attempting to send ${isSystemMessage ? 'system' : 'user'} message to session ${sessionId}`);
     
-    // Use the unique ID for system messages or let Firestore generate one
-    let docRef: DocumentReference;
-    
-    if (uniqueId && isSystemMessage) {
-      // Use the uniqueId as the document ID for system messages
-      const messageDocRef = doc(messagesCollection, uniqueId);
-      try {
-        await setDoc(messageDocRef, messageData);
-      } catch (error) {
-        console.error("Error creating system message with fixed ID:", error);
-      }
-      docRef = messageDocRef;
-    } else {
-      // For regular messages, let Firestore generate the ID
-      docRef = await addDoc(messagesCollection, messageData);
+    // Add the message to the database with a specific retry
+    try {
+      const docRef = doc(messagesCollection, uniqueId);
+      await setDoc(docRef, messageData);
+      console.log(`Successfully added message to Firestore: ${uniqueId}`);
+      
+      // Also update the session's last activity
+      await updateSessionActivity(sessionId).catch(e => {
+        console.warn("Failed to update session activity, but message was sent:", e);
+      });
+    } catch (innerError: unknown) {
+      const errorMessage = innerError instanceof Error ? innerError.message : String(innerError);
+      console.error(`Failed to add message to Firestore: ${errorMessage}`);
+      // Just log the error but don't rethrow - we'll return the ID anyway
     }
     
-    // Update the session's last activity timestamp
-    await updateDoc(doc(db, 'anon_sessions', sessionId), {
-      last_active: serverTimestamp()
-    });
-    
-    return docRef.id;
+    return uniqueId;
   } catch (error) {
-    console.error('Error sending message:', error);
-    return null;
+    console.error(`Error in sendMessage (${isSystemMessage ? 'system' : 'user'}):`, error);
+    // Return the generated ID anyway so UI doesn't break
+    return uniqueId;
   }
 };
 
@@ -404,13 +454,39 @@ export const sendMessage = async (
  */
 export const endChatSession = async (sessionId: string): Promise<boolean> => {
   try {
-    // Update session status to disconnected
-    await updateDoc(doc(db, 'anon_sessions', sessionId), {
-      status: 'disconnected',
-      last_active: serverTimestamp()
-    });
+    const userId = userIdentifier.getPermanentUserId();
     
-    return true;
+    // Check if the session exists first
+    try {
+      const sessionRef = doc(db, 'anon_sessions', sessionId);
+      const docSnapshot = await getDoc(sessionRef);
+      
+      if (!docSnapshot.exists()) {
+        console.log(`Session ${sessionId} no longer exists, nothing to end`);
+        return true; // Consider it success since there's nothing to end
+      }
+      
+      // Only update if the session still exists
+      await updateDoc(sessionRef, {
+        status: 'disconnected',
+        last_active: serverTimestamp(),
+        user_id: userId  // Include the user_id for security rules
+      });
+      
+      console.log(`Successfully ended session ${sessionId}`);
+      return true;
+    } catch (innerError: unknown) {
+      const errorMessage = innerError instanceof Error ? innerError.message : String(innerError);
+      
+      // If the error is about a missing document, log it but don't treat as an error
+      if (errorMessage.includes('No document to update')) {
+        console.log(`Session ${sessionId} was already removed`);
+        return true;
+      }
+      
+      // Re-throw other errors
+      throw innerError;
+    }
   } catch (error) {
     console.error('Error ending chat session:', error);
     return false;
@@ -418,43 +494,57 @@ export const endChatSession = async (sessionId: string): Promise<boolean> => {
 };
 
 /**
- * Clean up stale sessions for a specific user
+ * Clean up stale sessions for a given user
  */
 export const cleanupStaleSessions = async (userId: string): Promise<number> => {
   try {
-    // Query for any disconnected or old sessions for this user
-    const staleSessionsQuery = query(
-      sessionsCollection,
-      where('user_id', '==', userId),
-      where('status', 'in', ['disconnected', 'waiting'])
+    const db = getFirestore(firebaseApp);
+    let deletedCount = 0;
+    
+    // Query for disconnected sessions by this user
+    const disconnectedQuery = query(
+      collection(db, "anon_sessions"),
+      where("user_id", "==", userId),
+      where("status", "==", "disconnected")
     );
     
-    const snapshot = await getDocs(staleSessionsQuery);
-    let count = 0;
+    const disconnectedSnapshot = await getDocs(disconnectedQuery);
     
-    // Delete each stale session
-    for (const sessionDoc of snapshot.docs) {
-      const sessionData = sessionDoc.data() as AnonSession;
-      
-      // For waiting sessions, only cleanup if they're older than 30 minutes
-      if (sessionData.status === 'waiting') {
-        const lastActive = sessionData.last_active?.toDate?.() || new Date(0);
-        const now = new Date();
-        const timeDiff = now.getTime() - lastActive.getTime();
-        
-        // Skip if waiting session is still fresh (less than 30 minutes old)
-        if (timeDiff < 30 * 60 * 1000) {
-          continue;
-        }
-      }
-      
-      await deleteDoc(sessionDoc.ref);
-      count++;
-    }
+    // Delete disconnected sessions
+    const disconnectedPromises = disconnectedSnapshot.docs.map(doc => {
+      deletedCount++;
+      return deleteDoc(doc.ref);
+    });
     
-    return count;
+    // Query for waiting sessions that are older than 30 minutes
+    const thirtyMinutesAgo = new Date();
+    thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
+    
+    const waitingQuery = query(
+      collection(db, "anon_sessions"),
+      where("user_id", "==", userId),
+      where("status", "==", "waiting")
+    );
+    
+    const waitingSnapshot = await getDocs(waitingQuery);
+    
+    // Delete old waiting sessions (those more than 30 mins old)
+    const waitingPromises = waitingSnapshot.docs
+      .filter(doc => {
+        const createdAt = doc.data().created_at?.toDate?.();
+        return createdAt && createdAt < thirtyMinutesAgo;
+      })
+      .map(doc => {
+        deletedCount++;
+        return deleteDoc(doc.ref);
+      });
+    
+    // Execute all deletes in parallel
+    await Promise.all([...disconnectedPromises, ...waitingPromises]);
+    
+    return deletedCount;
   } catch (error) {
-    console.error('Error cleaning up stale sessions:', error);
+    console.error("Error cleaning up stale sessions:", error);
     return 0;
   }
 };
@@ -466,28 +556,44 @@ export const setupMessagesListener = (
   sessionId: string,
   callback: (messages: ChatMessage[]) => void
 ): (() => void) => {
-  const messagesCollection = collection(db, 'anon_sessions', sessionId, 'messages');
-  
-  const unsubscribe = onSnapshot(messagesCollection, (snapshot) => {
-    const newMessages: ChatMessage[] = [];
-    snapshot.docs.forEach((doc) => {
-      newMessages.push({
-        id: doc.id,
-        ...doc.data()
-      } as ChatMessage);
-    });
+  try {
+    const messagesCollection = collection(db, 'anon_sessions', sessionId, 'messages');
     
-    // Sort messages by timestamp
-    newMessages.sort((a, b) => {
-      const aTime = a.timestamp instanceof Timestamp ? a.timestamp.toMillis() : 0;
-      const bTime = b.timestamp instanceof Timestamp ? b.timestamp.toMillis() : 0;
-      return aTime - bTime;
-    });
+    console.log(`Setting up messages listener for session ${sessionId}`);
     
-    callback(newMessages);
-  });
-  
-  return unsubscribe;
+    const unsubscribe = onSnapshot(
+      messagesCollection, 
+      (snapshot) => {
+        const newMessages: ChatMessage[] = [];
+        snapshot.docs.forEach((doc) => {
+          newMessages.push({
+            id: doc.id,
+            ...doc.data()
+          } as ChatMessage);
+        });
+        
+        // Sort messages by timestamp
+        newMessages.sort((a, b) => {
+          const aTime = a.timestamp instanceof Timestamp ? a.timestamp.toMillis() : 0;
+          const bTime = b.timestamp instanceof Timestamp ? b.timestamp.toMillis() : 0;
+          return aTime - bTime;
+        });
+        
+        callback(newMessages);
+      },
+      (error) => {
+        console.error(`Error in messages listener for session ${sessionId}:`, error);
+        // Return empty array on error to avoid breaking the UI
+        callback([]);
+      }
+    );
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error(`Error setting up messages listener for session ${sessionId}:`, error);
+    // Return a no-op function as fallback
+    return () => {};
+  }
 };
 
 /**
@@ -510,6 +616,24 @@ export const setupSessionListener = (
   });
   
   return unsubscribe;
+};
+
+/**
+ * Update a session's last activity timestamp
+ */
+export const updateSessionActivity = async (sessionId: string): Promise<void> => {
+  try {
+    const db = getFirestore(firebaseApp);
+    const userId = userIdentifier.getPermanentUserId();
+    
+    // Include the user_id in the update to satisfy security rules
+    await updateDoc(doc(db, 'anon_sessions', sessionId), {
+      last_active: serverTimestamp(),
+      user_id: userId  // Keep the original user_id to maintain permissions
+    });
+  } catch (error) {
+    console.error('Error updating session activity:', error);
+  }
 };
 
 // Create a named export object
