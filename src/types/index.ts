@@ -2,7 +2,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 export type Gender = 'male' | 'female' | 'other';
-export type PreferredGender = Gender | 'any';
+export type PreferredGender = Gender | 'any' | 'both';
 
 export interface User {
   userId: string;

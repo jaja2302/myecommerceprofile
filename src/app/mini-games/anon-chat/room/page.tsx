@@ -1,419 +1,270 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
-import { useChat } from '@/hooks/useChat';
-import { createUserInDb, db, cleanupStaleUserStates } from '@/lib/firebase';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import ChatUI from '@/components/Anonchat/ChatUI';
-import WaitingScreen from '@/components/Anonchat/WaitingScreen';
-import ErrorMessage from '@/components/Anonchat/ErrorMessage';
-import { Gender, PreferredGender } from '@/types';
-import { getDatabase, ref, onValue } from "firebase/database";
-import { collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { Navbar } from '@/components/Navbar';
+import { Footer } from '@/components/Footer';
+import { useAnonChat, Gender, PreferredGender } from '@/hooks/useAnonChat';
+import { v4 as uuidv4 } from 'uuid';
 
-// Random username generator
-const generateRandomUsername = (): string => {
-  const adjectives = ['Happy', 'Funny', 'Clever', 'Brave', 'Gentle', 'Calm', 'Eager', 'Kind', 'Smart', 'Witty'];
-  const nouns = ['Panda', 'Tiger', 'Dolphin', 'Eagle', 'Fox', 'Wolf', 'Rabbit', 'Koala', 'Parrot', 'Turtle'];
-  
-  const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
-  const randomNumber = Math.floor(Math.random() * 1000);
-  
-  return `${randomAdjective}${randomNoun}${randomNumber}`;
-};
-
-export default function ChatPage() {
+export default function ChatRoom() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
-  const [username, setUsername] = useState<string>('');
-  const [searching, setSearching] = useState<boolean>(false);
-  const [initialized, setInitialized] = useState<boolean>(false);
-  const [isInitializing, setIsInitializing] = useState<boolean>(false);
-  const [userGender, setUserGender] = useState<Gender | ''>('');
+  const [messageText, setMessageText] = useState<string>('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
+  const [userGender, setUserGender] = useState<Gender>('other');
   const [preferredGender, setPreferredGender] = useState<PreferredGender>('any');
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<string>('checking');
-  const [shouldUseChat, setShouldUseChat] = useState<boolean>(false);
-  const [retryCount, setRetryCount] = useState<number>(0);
-  const [matchStatus, setMatchStatus] = useState<string>('idle'); // idle, requesting, matching, matched, failed
-  
-  // Penting: hooks harus dipanggil secara unconditional (tidak dalam if statement)
-  // Gunakan variable state untuk menentukan apakah hook harus aktif
-  const {
-    chatId,
-    messages,
-    partnerGender,
-    loading: chatLoading,
-    error: chatError,
-    startChat,
-    sendChatMessage,
-    endChat,
-  } = useChat(shouldUseChat ? user?.uid : undefined);
-  
-  // Start by getting gender preferences from sessionStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !userGender) {
-      try {
-        const storedUserGender = sessionStorage.getItem('userGender') as Gender | null;
-        const storedPreferredGender = sessionStorage.getItem('preferredGender') as PreferredGender | null;
-        
-        console.log("Retrieved from session storage:", { storedUserGender, storedPreferredGender });
-        
-        if (storedUserGender) {
-          setUserGender(storedUserGender);
-        }
-        
-        if (storedPreferredGender) {
-          setPreferredGender(storedPreferredGender);
-        }
-      } catch (e) {
-        console.error("Error accessing sessionStorage:", e);
-      }
-    }
-  }, [userGender]);
-  
-  // Check connection status - ALWAYS include this effect, don't make it conditional
-  useEffect(() => {
-    const checkOnlineStatus = () => {
-      setConnectionStatus(navigator.onLine ? 'online' : 'offline');
-    };
-    
-    window.addEventListener('online', checkOnlineStatus);
-    window.addEventListener('offline', checkOnlineStatus);
-    checkOnlineStatus();
-    
-    return () => {
-      window.removeEventListener('online', checkOnlineStatus);
-      window.removeEventListener('offline', checkOnlineStatus);
-    };
-  }, []);
-  
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    let redirectTimer: NodeJS.Timeout | null = null;
-    
-    if (!authLoading && !user) {
-      console.log("User not authenticated, redirecting to login page");
-      setLocalError("You need to be logged in. Redirecting to login page...");
-      
-      redirectTimer = setTimeout(() => {
-        router.push('/mini-games/anon-chat');
-      }, 2000);
-    }
-    
-    return () => {
-      if (redirectTimer) clearTimeout(redirectTimer);
-    };
-  }, [user, authLoading, router]);
-  
-  // Initialize user profile after authentication is complete
-  useEffect(() => {
-    const initializeUserProfile = async () => {
-      if (user && !initialized && !isInitializing && userGender) {
-        setIsInitializing(true);
-        try {
-          console.log("Initializing user with gender:", userGender);
-        const generatedUsername = generateRandomUsername();
-        setUsername(generatedUsername);
-          
-          // Check if user already exists
-          const userRef = doc(db, "users", user.uid);
-          const userDoc = await getDoc(userRef);
-          
-          if (userDoc.exists()) {
-            console.log("User already exists, updating preferences");
-            await updateDoc(userRef, {
-              preferredGender: preferredGender
-            });
-            setUsername(userDoc.data().username || generatedUsername);
-          } else {
-            console.log("Creating new user");
-            await createUserInDb(user.uid, generatedUsername, userGender as Gender);
-        
-        // Update user preferences in database
-        await updateDoc(userRef, {
-              preferredGender: preferredGender
-        });
-            console.log("User preferences updated");
-          }
-        
-        setInitialized(true);
-          // Only now enable the chat hook
-          setShouldUseChat(true);
-      } catch (err) {
-        console.error("Failed to initialize user:", err);
-          setLocalError("Failed to initialize user. Please try again.");
-        } finally {
-          setIsInitializing(false);
-        }
-      }
-    };
-    
-    initializeUserProfile();
-  }, [user, initialized, isInitializing, userGender, preferredGender]);
-  
-  // For multi-device testing with same account
-  useEffect(() => {
-    // Check if we're in a multi-device test scenario
-    const checkMultiDeviceTest = async () => {
-      if (user && initialized) {
-        try {
-          // Query for other sessions with the same userId
-          const userSessionsQuery = query(
-            collection(db, "users"),
-            where("userId", "==", user.uid),
-            limit(5)
-          );
-          
-          const sessionsSnapshot = await getDocs(userSessionsQuery);
-          
-          if (sessionsSnapshot.size > 1) {
-            console.log(`[MULTI-DEVICE] Detected ${sessionsSnapshot.size} sessions with same userId`);
-            
-            // Get the sessions that aren't this one
-            const otherSessions = sessionsSnapshot.docs
-              .map(doc => doc.data())
-              .filter(session => {
-                // Filter based on a unique browser fingerprint or timestamp
-                // This is a simplified example
-                if (typeof window !== 'undefined') {
-                  const deviceId = localStorage.getItem(`anonchat_device_${user.uid}`);
-                  return session.deviceId && session.deviceId !== deviceId;
-                }
-                return true;
-              });
-            
-            if (otherSessions.length > 0) {
-              console.log(`[MULTI-DEVICE] Found ${otherSessions.length} other sessions`);
-              
-              // Display a warning
-              setLocalError("Warning: Multiple sessions detected with the same account. This may cause unexpected behavior.");
-            }
-          }
-        } catch (error) {
-          console.error("[MULTI-DEVICE] Error checking for multiple sessions:", error);
-        }
-      }
-    };
-    
-    checkMultiDeviceTest();
-  }, [user, initialized]);
-  
-  const handleStartChat = useCallback(async (): Promise<void> => {
-    setSearching(true);
-    setLocalError(null); // Clear any previous local errors
-    setMatchStatus('requesting');
-    
-    // Reset retry counter if this is a new chat attempt (not a retry)
-    if (retryCount === 0) {
-      console.log("[CHAT] Starting new chat search with preferred gender:", preferredGender);
-    } else {
-      console.log(`[CHAT] Retry attempt ${retryCount} with preferred gender:`, preferredGender);
-    }
-    
-    try {
-      // Start matching process
-      setMatchStatus('matching');
-      const success = await startChat(preferredGender);
-      
-      if (!success) {
-        console.log("[CHAT] Failed to find chat partner");
-        setMatchStatus('failed');
-        
-        // Implement escalating retry wait times
-        const maxRetries = 3;
-        if (retryCount < maxRetries) {
-          const nextRetry = retryCount + 1;
-          const waitTime = Math.min(2000 * nextRetry, 6000); // Escalating delay: 2s, 4s, 6s
-          
-          setLocalError(`No users available right now. Retrying in ${waitTime/1000} seconds... (${nextRetry}/${maxRetries})`);
-          setRetryCount(nextRetry);
-          
-          // Schedule retry
-          setTimeout(() => {
-            if (document.visibilityState === 'visible') {
-              handleStartChat();
-            } else {
-              setLocalError("Paused retrying because tab is in background. Click 'Start Chat' to try again.");
-              setSearching(false);
-              setRetryCount(0);
-            }
-          }, waitTime);
-        } else {
-          setLocalError("No users available right now. Try again later.");
-          setSearching(false);
-          setRetryCount(0);
-        }
-      } else {
-        // Match successful
-        setMatchStatus('matched');
-        setRetryCount(0);
-        setSearching(false);
-      }
-    } catch (error) {
-      console.error("[CHAT] Error starting chat:", error);
-      setMatchStatus('failed');
-      
-      // Show more specific error message based on error
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      if (errorMessage.includes("not available")) {
-        setLocalError("User is no longer available. Please try again.");
-      } else if (errorMessage.includes("timeout") || errorMessage.includes("deadline-exceeded")) {
-        setLocalError("Connection timeout. Please check your internet and try again.");
-      } else {
-        setLocalError(`Error starting chat: ${errorMessage}. Please try again.`);
-      }
-      
-      setSearching(false);
-      setRetryCount(0);
-    }
-  }, [preferredGender, startChat, retryCount]);
-  
-  const handleSendMessage = useCallback(async (message: string): Promise<void> => {
-    if (!sendChatMessage) return; // Guard clause
-    
-    try {
-    await sendChatMessage(message);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      setLocalError("Failed to send message. Please try again.");
-    }
-  }, [sendChatMessage]);
-  
-  const handleEndChat = useCallback(async (): Promise<void> => {
-    if (!endChat) return; // Guard clause
-    
-    try {
-    await endChat();
-    } catch (error) {
-      console.error("Error ending chat:", error);
-      setLocalError("Failed to end chat. Please try again.");
-    }
-  }, [endChat]);
+  const [lastErrorTime, setLastErrorTime] = useState<number>(0);
 
-  const handleBackToHome = useCallback(() => {
-    // Clear session storage
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.removeItem('userGender');
-        sessionStorage.removeItem('preferredGender');
-      } catch (e) {
-        console.error("Error accessing sessionStorage:", e);
+  // Get chat functionality from our custom hook
+  const { 
+    sessionId, 
+    partnerId, 
+    partnerGender, 
+    messages, 
+    loading, 
+    error, 
+    startChat,
+    findPartner,
+    sendMessage, 
+    endChat 
+  } = useAnonChat();
+
+  // Get user preferences from session storage
+  useEffect(() => {
+    const storedGender = sessionStorage.getItem('userGender') as Gender;
+    const storedPreference = sessionStorage.getItem('preferredGender') as PreferredGender;
+    
+    if (storedGender) {
+      setUserGender(storedGender);
+    }
+    
+    if (storedPreference) {
+      setPreferredGender(storedPreference);
+    }
+  }, []);
+
+  // Auto-scroll to bottom of messages
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Start chat on component mount
+  useEffect(() => {
+    if (userGender) {
+      startChat(userGender, preferredGender);
+    }
+  }, [userGender, preferredGender, startChat]);
+
+  // Focus input when partner is found
+  useEffect(() => {
+    if (partnerId && messageInputRef.current) {
+      messageInputRef.current.focus();
+    }
+  }, [partnerId]);
+
+  // Handle showing errors without disrupting the UI too much
+  useEffect(() => {
+    if (error) {
+      const now = Date.now();
+      // Only show error alert if it's been more than 5 seconds since the last one
+      if (now - lastErrorTime > 5000) {
+        setLastErrorTime(now);
+        if (error.includes('partner disconnected') || error.includes('ended')) {
+          // Partner left - show a temporary message instead of an alert
+          console.log('Partner disconnected');
+        } else {
+          // For other errors, show alert
+          alert(error);
+        }
       }
+    }
+  }, [error, lastErrorTime]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!messageText.trim()) return;
+    
+    const success = await sendMessage(messageText);
+    if (success) {
+      setMessageText('');
+      messageInputRef.current?.focus();
+    }
+  };
+
+  const handleFindNewPartner = async () => {
+    // First end current chat if there's a partner
+    if (partnerId) {
+      await endChat();
+    }
+    
+    // Then find a new partner
+    await startChat(userGender, preferredGender);
+  };
+
+  const handleLeaveChat = async () => {
+    if (partnerId) {
+      await endChat();
     }
     router.push('/mini-games/anon-chat');
-  }, [router]);
-  
-  // Tambahkan efek untuk membersihkan stale users saat komponen dimount
-  useEffect(() => {
-    // Run cleanup when component mounts
-    const runCleanup = async () => {
-      try {
-        console.log("[PAGE] Running stale user cleanup");
-        await cleanupStaleUserStates();
-      } catch (error) {
-        console.error("[PAGE] Error during cleanup:", error);
-      }
-    };
-    
-    runCleanup();
-  }, []);
-  
-  // Display loading state
-  if (authLoading || isInitializing) {
-    return (
-      <div className="flex flex-col min-h-screen bg-gray-100">
-        <div className="flex items-center justify-center flex-grow">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
-            <p className="mt-4 text-gray-700">
-              {authLoading ? 'Authenticating...' : 'Setting up your chat profile...'}
-            </p>
-            <p className="mt-2 text-sm text-gray-500">
-              {user ? `User ID: ${user.uid.slice(0, 8)}...` : 'Waiting for authentication...'}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
-  // If user is logged in but no gender is selected, redirect back
-  if (!authLoading && user && !userGender) {
+  };
+
   return (
-      <div className="flex flex-col min-h-screen bg-gray-100">
-          <div className="flex items-center justify-center flex-grow">
-          <div className="text-center max-w-md p-6 bg-white rounded-lg shadow-md">
-            <div className="text-red-600 text-xl mb-4">Missing Gender Selection</div>
-            <p className="mb-6">You need to select your gender before starting a chat.</p>
-            <button
-              onClick={handleBackToHome}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-            >
-              Go Back to Setup
-            </button>
-          </div>
-        </div>
+    <div className="flex flex-col min-h-screen">
+      {/* Space for navbar */}
+      <div className="h-16"></div>
+      
+      {/* Navbar with highest possible z-index */}
+      <div className="fixed top-0 left-0 right-0 z-[9999]">
+        <Navbar />
       </div>
-    );
-  }
-  
-  // Connection warning if offline
-  const connectionWarning = connectionStatus === 'offline' && (
-    <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
-      <p className="font-bold">You are offline</p>
-      <p>Messages will be sent when your connection is restored.</p>
-    </div>
-  );
-  
-  // Main UI - after initialization is complete
-  return (
-    <div className="flex flex-col min-h-screen bg-gray-100">
-      <div className="p-4 bg-white border-b border-gray-200">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <div className="font-bold text-xl">Anonymous Chat</div>
-          <button
-            onClick={handleBackToHome}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded-md text-sm"
-          >
-            New Chat
-          </button>
-        </div>
+      
+      {/* Main content - chat interface */}
+      <main className="flex-grow flex flex-col p-4 bg-gray-100 z-10 pt-6">
+        <div className="max-w-3xl w-full mx-auto bg-white rounded-lg shadow flex flex-col h-[calc(100vh-150px)]">
+          {/* Header with partner info and controls */}
+          <div className="p-4 border-b flex items-center justify-between bg-blue-600 text-white rounded-t-lg">
+            <div className="flex items-center">
+              <div className="h-10 w-10 rounded-full bg-blue-400 flex items-center justify-center text-white font-bold">
+                {partnerGender ? partnerGender.charAt(0).toUpperCase() : '?'}
+              </div>
+              <div className="ml-3">
+                <h3 className="font-medium">
+                  {partnerId 
+                    ? `Chatting with ${partnerGender === 'male' 
+                        ? 'Male' 
+                        : partnerGender === 'female' 
+                          ? 'Female' 
+                          : 'Anonymous'}`
+                    : 'Finding someone to chat with...'}
+                </h3>
+                <p className="text-sm text-blue-200">
+                  {loading 
+                    ? 'Please wait...' 
+                    : partnerId 
+                      ? 'Connected' 
+                      : 'Waiting for connection...'}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button 
+                onClick={handleFindNewPartner}
+                disabled={loading}
+                className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1 rounded text-sm transition-colors disabled:bg-blue-300"
+              >
+                {loading ? 'Finding...' : 'New Chat'}
+              </button>
+              <button 
+                onClick={handleLeaveChat}
+                className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1 rounded text-sm transition-colors"
+              >
+                Leave
+              </button>
+            </div>
           </div>
-    
-      <div className="flex-grow p-4">
-        <div className="max-w-4xl mx-auto h-full flex flex-col">
-          {connectionWarning}
-          {localError && <ErrorMessage message={localError} />}
-          {chatError && <ErrorMessage message={chatError} />}
           
-          <div className="bg-white rounded-lg shadow-md overflow-hidden flex-grow flex flex-col">
-            {chatId ? (
-              <ChatUI
-                messages={messages}
-                userId={user?.uid || ''}
-                partnerGender={partnerGender}
-                onSendMessage={handleSendMessage}
-                onEndChat={handleEndChat}
-              />
+          {/* Messages area */}
+          <div className="flex-grow overflow-y-auto p-4">
+            {messages.length === 0 && !loading && !partnerId ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                <p className="text-center max-w-sm">
+                  Waiting to match you with someone to chat with. This may take a moment.
+                </p>
+              </div>
             ) : (
-              <WaitingScreen
-                username={username}
-                userGender={userGender as Gender}
-                preferredGender={preferredGender}
-                setPreferredGender={setPreferredGender}
-                onStartChat={handleStartChat}
-                searching={searching}
-                matchStatus={matchStatus}
-                retryCount={retryCount}
-              />
+              <div className="space-y-3">
+                {/* System message at start */}
+                {!loading && !partnerId && messages.length === 0 && (
+                  <div className="bg-gray-100 p-3 rounded-lg text-center text-gray-600 text-sm">
+                    Looking for someone to chat with...
+                  </div>
+                )}
+                
+                {/* Actual messages */}
+                {messages.map((message) => {
+                  const isOwnMessage = message.senderId !== 'system' && message.senderId !== partnerId;
+                  const isSystemMessage = message.senderId === 'system';
+                  
+                  if (isSystemMessage) {
+                    return (
+                      <div key={message.id} className="bg-gray-100 p-3 rounded-lg text-center text-gray-600 text-sm">
+                        {message.text}
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div 
+                      key={message.id} 
+                      className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div 
+                        className={`max-w-[80%] p-3 rounded-lg ${
+                          isOwnMessage 
+                            ? 'bg-blue-600 text-white rounded-br-none' 
+                            : 'bg-gray-200 text-gray-800 rounded-bl-none'
+                        }`}
+                      >
+                        {message.text}
+                        <div 
+                          className={`text-xs mt-1 ${
+                            isOwnMessage ? 'text-blue-200' : 'text-gray-500'
+                          }`}
+                        >
+                          {new Date(message.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                {/* Scroll anchor */}
+                <div ref={messagesEndRef} />
+              </div>
             )}
           </div>
+          
+          {/* Message input area */}
+          <form onSubmit={handleSendMessage} className="p-3 border-t flex items-center">
+            <input
+              type="text"
+              ref={messageInputRef}
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              disabled={!partnerId || loading}
+              placeholder={
+                loading 
+                  ? "Finding someone to chat with..." 
+                  : !partnerId 
+                    ? "Waiting for connection..." 
+                    : "Type a message..."
+              }
+              className="flex-grow p-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-100"
+            />
+            <button
+              type="submit"
+              disabled={!messageText.trim() || !partnerId || loading}
+              className="ml-2 bg-blue-600 text-white p-2 rounded-full w-10 h-10 flex items-center justify-center disabled:bg-gray-300"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+              </svg>
+            </button>
+          </form>
         </div>
-      </div>
+      </main>
+      
+      {/* Footer fixed at bottom */}
+      <Footer />
     </div>
   );
 }

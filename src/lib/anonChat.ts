@@ -19,16 +19,26 @@ import {
   onSnapshot,
   Timestamp,
   setDoc,
-  getDoc
+  getDoc,
+  runTransaction,
+  Transaction,
+  writeBatch,
+  DocumentData,
+  QueryDocumentSnapshot,
+  DocumentSnapshot
 } from 'firebase/firestore';
 import { firebaseApp } from './firebase';
 import userIdentifier from './userIdentifier';
+
+// Check if code is running in browser environment
+const isBrowser = typeof window !== 'undefined';
 
 // Type definitions
 export interface AnonSession {
   session_id?: string;
   user_id: string;
   partner_id: string | null;
+  partner_session_id?: string | null;
   status: 'waiting' | 'chatting' | 'disconnected';
   last_active: Timestamp | null;
   gender?: string;
@@ -90,6 +100,12 @@ export const createChatSession = async (
   try {
     const userId = userIdentifier.getPermanentUserId();
     const sessionCreationKey = 'anonchat_session_creation_lock';
+    
+    // Check if we're in browser environment
+    if (!isBrowser) {
+      console.log('Not in browser environment, skipping localStorage operations');
+      return null;
+    }
     
     // Check if session creation is already in progress
     const lockData = localStorage.getItem(sessionCreationKey);
@@ -192,7 +208,9 @@ export const createChatSession = async (
     }
   } catch (error) {
     console.error('Error creating chat session:', error);
-    localStorage.removeItem('anonchat_session_creation_lock');
+    if (isBrowser) {
+      localStorage.removeItem('anonchat_session_creation_lock');
+    }
     return null;
   }
 };
@@ -209,14 +227,21 @@ export const findChatPartner = async (
     const userId = userIdentifier.getPermanentUserId();
     console.log(`Finding chat partner for user ${userId} with preferences: gender=${gender}, lookingFor=${lookingFor}`);
     
-    // Build query based on preferences
+    // First, verify our own session is still valid
+    const ownSession = await getDoc(doc(sessionsCollection, sessionId));
+    if (!ownSession.exists() || ownSession.data().status !== 'waiting') {
+      console.log('Own session is no longer valid');
+      return { partnerId: null, partnerSessionId: null };
+    }
+
+    // Build base query for potential partners
     let partnerQuery = query(
       sessionsCollection,
       where('status', '==', 'waiting'),
       where('user_id', '!=', userId)
     );
-    
-    // Add gender filter if not looking for any gender
+
+    // Add gender preference filters
     if (lookingFor !== 'any') {
       partnerQuery = query(
         sessionsCollection,
@@ -225,65 +250,90 @@ export const findChatPartner = async (
         where('gender', '==', lookingFor)
       );
     }
-    
-    // If we have a gender-specific match, prioritize those looking for our gender
-    if (gender && lookingFor !== 'any') {
-      try {
-        const preferredPartnersQuery = query(
-          sessionsCollection,
-          where('status', '==', 'waiting'),
-          where('user_id', '!=', userId),
-          where('gender', '==', lookingFor),
-          where('lookingFor', 'in', [gender, 'any'])
-        );
-        
-        const preferredSnapshot = await getDocs(preferredPartnersQuery);
-        
-        if (!preferredSnapshot.empty) {
-          const partnerDoc = preferredSnapshot.docs[0];
-          const partnerId = partnerDoc.data().user_id;
-          console.log(`Found preferred partner: ${partnerId} (session: ${partnerDoc.id})`);
-          
-          return {
-            partnerId,
-            partnerSessionId: partnerDoc.id
-          };
+
+    // Get potential partners
+    const snapshot = await getDocs(partnerQuery);
+    if (snapshot.empty) {
+      console.log('No available partners found');
+      return { partnerId: null, partnerSessionId: null };
+    }
+
+    // Filter and sort partners by compatibility
+    const compatiblePartners = snapshot.docs
+      .map(doc => ({ id: doc.id, data: doc.data() }))
+      .filter(partner => {
+        // Filter out partners that wouldn't accept us based on their preferences
+        if (partner.data.lookingFor !== 'any' && partner.data.lookingFor !== gender) {
+          return false;
         }
-      } catch (error) {
-        console.error('Error finding preferred partner, falling back to basic search:', error);
-        // Continue with regular search
-      }
-    }
-    
-    // If no preferred match, find any eligible partner
-    try {
-      const snapshot = await getDocs(partnerQuery);
-      
-      if (!snapshot.empty) {
-        const partnerDoc = snapshot.docs[0];
-        const partnerId = partnerDoc.data().user_id;
-        console.log(`Found basic partner: ${partnerId} (session: ${partnerDoc.id})`);
+        return true;
+      })
+      .sort((a, b) => {
+        // Prioritize mutual gender preferences
+        const aWantsUs = a.data.lookingFor === gender;
+        const bWantsUs = b.data.lookingFor === gender;
+        if (aWantsUs && !bWantsUs) return -1;
+        if (!aWantsUs && bWantsUs) return 1;
         
-        return {
-          partnerId,
-          partnerSessionId: partnerDoc.id
-        };
+        // Then sort by waiting time (oldest first)
+        return a.data.created_at.toMillis() - b.data.created_at.toMillis();
+      });
+
+    // Try to connect with each compatible partner in order
+    for (const partner of compatiblePartners) {
+      // Double-check partner is still available
+      const freshPartnerDoc = await getDoc(doc(sessionsCollection, partner.id));
+      if (!freshPartnerDoc.exists() || freshPartnerDoc.data().status !== 'waiting') {
+        continue;
       }
-    } catch (error) {
-      console.error('Error finding any partner:', error);
+
+      // Try to atomically update both sessions
+      try {
+        await runTransaction(db, async (transaction: Transaction) => {
+          // Get fresh copies of both sessions
+          const currentSession = await transaction.get(doc(sessionsCollection, sessionId));
+          const partnerSession = await transaction.get(doc(sessionsCollection, partner.id));
+
+          // Verify both sessions are still valid
+          if (!currentSession.exists() || !partnerSession.exists() ||
+              currentSession.data()?.status !== 'waiting' ||
+              partnerSession.data()?.status !== 'waiting') {
+            throw new Error('Session no longer valid');
+          }
+
+          // Update both sessions atomically
+          transaction.update(doc(sessionsCollection, sessionId), {
+            status: 'chatting',
+            partner_id: partner.data.user_id,
+            partner_session_id: partner.id,
+            last_active: serverTimestamp()
+          });
+
+          transaction.update(doc(sessionsCollection, partner.id), {
+            status: 'chatting',
+            partner_id: userId,
+            partner_session_id: sessionId,
+            last_active: serverTimestamp()
+          });
+        });
+
+        console.log(`Successfully matched with partner ${partner.data.user_id}`);
+        return {
+          partnerId: partner.data.user_id,
+          partnerSessionId: partner.id
+        };
+      } catch (error) {
+        console.log(`Failed to match with partner ${partner.data.user_id}, trying next...`);
+        continue;
+      }
     }
-    
-    console.log('No partners found');
-    return {
-      partnerId: null,
-      partnerSessionId: null
-    };
+
+    // If we get here, we couldn't match with any partner
+    console.log('No compatible partners were available');
+    return { partnerId: null, partnerSessionId: null };
   } catch (error) {
-    console.error('Error in findChatPartner:', error);
-    return {
-      partnerId: null,
-      partnerSessionId: null
-    };
+    console.error('Error finding chat partner:', error);
+    return { partnerId: null, partnerSessionId: null };
   }
 };
 
@@ -498,53 +548,83 @@ export const endChatSession = async (sessionId: string): Promise<boolean> => {
  */
 export const cleanupStaleSessions = async (userId: string): Promise<number> => {
   try {
-    const db = getFirestore(firebaseApp);
-    let deletedCount = 0;
+    console.log(`Cleaning up stale sessions for user ${userId}`);
     
-    // Query for disconnected sessions by this user
-    const disconnectedQuery = query(
-      collection(db, "anon_sessions"),
-      where("user_id", "==", userId),
-      where("status", "==", "disconnected")
+    // Get all sessions for this user
+    const userSessionsQuery = query(
+      sessionsCollection,
+      where('user_id', '==', userId)
     );
     
-    const disconnectedSnapshot = await getDocs(disconnectedQuery);
+    const snapshot = await getDocs(userSessionsQuery);
+    let cleanedCount = 0;
     
-    // Delete disconnected sessions
-    const disconnectedPromises = disconnectedSnapshot.docs.map(doc => {
-      deletedCount++;
-      return deleteDoc(doc.ref);
-    });
+    // Batch updates for better performance
+    const batch = writeBatch(db);
+    const now = Timestamp.now();
     
-    // Query for waiting sessions that are older than 30 minutes
-    const thirtyMinutesAgo = new Date();
-    thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
+    for (const docSnapshot of snapshot.docs) {
+      const session = docSnapshot.data() as AnonSession;
+      const sessionRef = docSnapshot.ref;
+      
+      // Check if session is stale based on multiple criteria
+      const isStale = (
+        // Session is older than 30 minutes
+        (session.created_at && now.toMillis() - session.created_at.toMillis() > 30 * 60 * 1000) ||
+        // No activity in last 5 minutes
+        (session.last_active && now.toMillis() - session.last_active.toMillis() > 5 * 60 * 1000) ||
+        // Session is in 'waiting' state for more than 10 minutes
+        (session.status === 'waiting' && session.created_at && 
+         now.toMillis() - session.created_at.toMillis() > 10 * 60 * 1000) ||
+        // Partner is disconnected
+        (session.status === 'chatting' && !session.partner_id)
+      );
+      
+      if (isStale) {
+        console.log(`Found stale session: ${docSnapshot.id}, status: ${session.status}`);
+        
+        // If session was chatting, also cleanup partner's session
+        if (session.status === 'chatting' && session.partner_id && session.partner_session_id) {
+          try {
+            const partnerSessionRef = doc(sessionsCollection, session.partner_session_id);
+            const partnerSessionSnap = await getDoc(partnerSessionRef);
+            
+            if (partnerSessionSnap.exists()) {
+              batch.update(partnerSessionRef, {
+                status: 'disconnected',
+                partner_id: null,
+                partner_session_id: null,
+                last_active: serverTimestamp()
+              });
+            }
+          } catch (err) {
+            console.warn(`Error cleaning up partner session: ${err}`);
+          }
+        }
+        
+        // Mark this session as disconnected
+        batch.update(sessionRef, {
+          status: 'disconnected',
+          partner_id: null,
+          partner_session_id: null,
+          last_active: serverTimestamp()
+        });
+        
+        cleanedCount++;
+      }
+    }
     
-    const waitingQuery = query(
-      collection(db, "anon_sessions"),
-      where("user_id", "==", userId),
-      where("status", "==", "waiting")
-    );
+    // Commit all updates
+    if (cleanedCount > 0) {
+      await batch.commit();
+      console.log(`Cleaned up ${cleanedCount} stale sessions`);
+    } else {
+      console.log('No stale sessions found');
+    }
     
-    const waitingSnapshot = await getDocs(waitingQuery);
-    
-    // Delete old waiting sessions (those more than 30 mins old)
-    const waitingPromises = waitingSnapshot.docs
-      .filter(doc => {
-        const createdAt = doc.data().created_at?.toDate?.();
-        return createdAt && createdAt < thirtyMinutesAgo;
-      })
-      .map(doc => {
-        deletedCount++;
-        return deleteDoc(doc.ref);
-      });
-    
-    // Execute all deletes in parallel
-    await Promise.all([...disconnectedPromises, ...waitingPromises]);
-    
-    return deletedCount;
+    return cleanedCount;
   } catch (error) {
-    console.error("Error cleaning up stale sessions:", error);
+    console.error('Error cleaning up stale sessions:', error);
     return 0;
   }
 };
