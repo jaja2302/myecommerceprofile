@@ -1,480 +1,289 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useAnonChat } from '@/hooks/useAnonChat';
+import React, { useState, useRef, useEffect } from 'react';
+import { useAblyChat } from '@/hooks/useAblyChat';
 import { Gender, PreferredGender } from '@/types';
+import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
 import Link from 'next/link';
 
-export default function AnonChatPage() {
-  const { 
-    loading, 
-    error, 
-    sessionId, 
-    partnerId, 
-    partnerGender, 
-    messages, 
-    startChat, 
-    sendMessage, 
+export default function AnonChat() {
+  const {
+    userId,
+    messages,
+    connectionStatus,
+    room,
+    isSearching,
+    partnerIsTyping,
+    error,
+    startChat,
+    sendMessage,
     endChat,
-    isConnected,
-    findPartner
-  } = useAnonChat();
-
-  const [userGender, setUserGender] = useState<Gender | ''>('');
-  const [preferredGender, setPreferredGender] = useState<PreferredGender>('both');
-  const [showGenderSelection, setShowGenderSelection] = useState(true);
-  const [findingPartner, setFindingPartner] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [partnerLeftNotification, setPartnerLeftNotification] = useState<string | null>(null);
-  const lastPartnerIdRef = useRef<string | null>(null);
-
-  // Effect to auto-reload page after 3 seconds if still connecting
-  useEffect(() => {
-    let reloadTimer: NodeJS.Timeout | null = null;
-    
-    if (!isConnected && !error) {
-      reloadTimer = setTimeout(() => {
-        // Auto reload the page after 3 seconds of connection issue
-        window.location.reload();
-      }, 3000);
+    handleTyping
+  } = useAblyChat();
+  
+  const [nickname, setNickname] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('anonchat_nickname') || 'Anonymous';
     }
-    
-    return () => {
-      if (reloadTimer) {
-        clearTimeout(reloadTimer);
-      }
-    };
-  }, [isConnected, error]);
-
-  // Effect to monitor sessionId changes and trigger partner finding
+    return 'Anonymous';
+  });
+  
+  const [gender, setGender] = useState<Gender>('male');
+  const [lookingFor, setLookingFor] = useState<PreferredGender>('female');
+  const [newMessage, setNewMessage] = useState('');
+  
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  
+  // Auto scroll to bottom when messages change
   useEffect(() => {
-    let sessionCheckTimeout: NodeJS.Timeout | null = null;
-
-    if (findingPartner) {
-      if (sessionId) {
-        console.log(`Session ID available: ${sessionId}, finding partner...`);
-        findPartner({ gender: userGender as Gender, lookingFor: preferredGender });
-      } else {
-        // Set a timeout to check if session becomes available
-        sessionCheckTimeout = setTimeout(() => {
-          if (findingPartner && !sessionId) {
-            console.error("Session creation timeout - session ID still not available after waiting");
-            setErrorMessage("Connection issue: Unable to create a chat session. Please try again.");
-            setFindingPartner(false);
-          }
-        }, 8000); // Wait 8 seconds for session creation
-      }
+    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+  
+  // Save nickname to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && nickname) {
+      localStorage.setItem('anonchat_nickname', nickname);
     }
-
-    // Cleanup
-    return () => {
-      if (sessionCheckTimeout) {
-        clearTimeout(sessionCheckTimeout);
-      }
-    };
-  }, [sessionId, findingPartner, findPartner, userGender, preferredGender]);
-
-  // Effect to monitor when partner leaves chat
-  useEffect(() => {
-    // If we had a partner before (stored in ref) but now partnerId is null
-    // and we're not actively looking for partners (not in findingPartner state)
-    if (lastPartnerIdRef.current && !partnerId && !findingPartner) {
-      // Show notification that partner left
-      setPartnerLeftNotification("Your chat partner has left the conversation.");
-      // Return to gender selection screen with notification
-      setShowGenderSelection(true);
-      
-      // Clear the notification after some time
-      const timer = setTimeout(() => {
-        setPartnerLeftNotification(null);
-      }, 5000);
-      
-      return () => clearTimeout(timer);
-    }
-    
-    // Update our reference when partnerId changes
-    lastPartnerIdRef.current = partnerId;
-  }, [partnerId, findingPartner]);
-
-  // Effect to monitor error messages related to chat partner
-  useEffect(() => {
-    // If error contains specific message about partner not found, it means partner left
-    if (error && (
-      error.includes("partner tidak ditemukan") || 
-      error.includes("No partner") ||
-      error.includes("Chat telah berakhir") ||
-      error.includes("Partner telah")
-    )) {
-      // Force end the current chat and reset UI state
-      endChat();
-      setShowGenderSelection(true);
-      setPartnerLeftNotification("Your chat partner has left the conversation.");
-      setErrorMessage(null); // Clear the error message
-      
-      // Clear the notification after some time
-      const timer = setTimeout(() => {
-        setPartnerLeftNotification(null);
-      }, 5000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [error, endChat]);
-
-  // Add custom listener for partner left event
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handlePartnerLeft = (event: Event) => {
-      console.log('Received anonchat_partner_left event');
-      const customEvent = event as CustomEvent;
-      const message = customEvent.detail?.message || 'Your chat partner has left the conversation.';
-      
-      // Update UI to show partner left
-      setShowGenderSelection(true);
-      setPartnerLeftNotification(message);
-      
-      // Clear the notification after some time
-      setTimeout(() => {
-        setPartnerLeftNotification(null);
-      }, 5000);
-    };
-
-    // Add event listener
-    window.addEventListener('anonchat_partner_left', handlePartnerLeft);
-    
-    // Clean up
-    return () => {
-      window.removeEventListener('anonchat_partner_left', handlePartnerLeft);
-    };
-  }, []);
-
-  // Fungsi untuk menangani mulai chat
+  }, [nickname]);
+  
+  // Handle starting a new chat
   const handleStartChat = async () => {
-    if (!userGender) {
-      alert("Harap pilih gender kamu dulu!");
-      return;
-    }
-    
-    console.log("Starting chat with:", { userGender, preferredGender });
-    setFindingPartner(true);
-    setErrorMessage(null);
-
-    // Create a session
-    const success = await startChat(userGender, preferredGender);
-    
-    if (!success) {
-      console.error("Failed to create chat session");
-      setErrorMessage("Failed to create chat session. Please try again.");
-      setFindingPartner(false);
-    }
-    // If successful, the useEffect will trigger findPartner when sessionId becomes available
-  };
-
-  // Fungsi untuk memilih gender
-  const selectGender = (gender: Gender) => {
-    console.log("Selecting gender:", gender);
-    setUserGender(gender);
+    await startChat({
+      nickname,
+      gender,
+      lookingFor
+    });
   };
   
-  // Fungsi untuk memilih preferensi gender
-  const selectPreferredGender = (preference: PreferredGender) => {
-    console.log("Selecting preference:", preference);
-    setPreferredGender(preference);
+  // Handle sending a message
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
+    
+    await sendMessage(newMessage.trim());
+    setNewMessage('');
   };
-
-  // Fungsi untuk menangani cancel mencari partner
-  const handleCancel = () => {
-    endChat();
-    setFindingPartner(false);
+  
+  // Handle input change
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    handleTyping(e.target.value);
   };
-
-  // Saat partner ditemukan
-  useEffect(() => {
-    if (partnerId) {
-      setFindingPartner(false);
-      setShowGenderSelection(false);
-      setPartnerLeftNotification(null); // Clear any previous notifications
-    }
-  }, [partnerId]);
-
-  // Saat chat berakhir, kembali ke tampilan pemilihan gender
-  useEffect(() => {
-    if (!partnerId && !findingPartner && !showGenderSelection) {
-      setShowGenderSelection(true);
-    }
-  }, [partnerId, findingPartner, showGenderSelection]);
-
-  // Tampilkan status sedang mencari partner
-  const renderFindingPartner = () => {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-6 px-4 text-center">
-        <div className="flex flex-col items-center space-y-3">
-          <div className="animate-pulse text-xl font-medium">Finding someone to chat with...</div>
-          <div className="mt-2 flex gap-2 justify-center">
-            <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
-            <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '600ms' }}></div>
-          </div>
-        </div>
-        <button 
-          className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors max-w-xs w-full" 
-          onClick={handleCancel}
-          disabled={!isConnected}
-        >
-          Cancel
-        </button>
-      </div>
-    );
-  };
-
-  // Tampilkan layar pemilihan profile
-  const renderProfileSelection = () => {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4 space-y-6">
-        <div className="space-y-2 text-center">
-          <h2 className="text-2xl font-bold">Anonymous Chat</h2>
-          <p className="text-gray-500">
-            Chat anonymously with random people
-          </p>
-          
-          {/* Error Message */}
-          {errorMessage && (
-            <div className="mt-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
-              <p>{errorMessage}</p>
-            </div>
-          )}
-          
-          {/* Partner Left Notification */}
-          {partnerLeftNotification && (
-            <div className="mt-3 p-3 bg-amber-100 border border-amber-400 text-amber-700 rounded-md text-sm">
-              <p>{partnerLeftNotification}</p>
-            </div>
-          )}
-          
-          {/* Connection Status */}
-          <div className={`mt-2 py-2 px-3 rounded-md text-sm ${
-            isConnected 
-              ? "bg-green-100 text-green-800" 
-              : "bg-amber-100 text-amber-800"
-          }`}>
-            {isConnected 
-              ? "✓ Connected to chat server" 
-              : (
-                <div className="flex flex-col items-center">
-                  <span>Connecting to chat server...</span>
-                  <div className="mt-1 flex gap-2 justify-center">
-                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '600ms' }}></div>
-                  </div>
-                </div>
-              )
-            }
-          </div>
-        </div>
-
-        <div className="space-y-8 w-full max-w-xs">
-          {/* I am... selection */}
-          <div className="space-y-4">
-            <p className="block text-lg font-medium text-gray-700 text-center">I am a...</p>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => selectGender('male')}
-                className={`py-4 px-4 text-lg rounded-lg border-2 ${
-                  userGender === 'male' 
-                    ? 'bg-blue-100 border-blue-500 text-blue-700 font-bold' 
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Male
-              </button>
-              <button
-                type="button"
-                onClick={() => selectGender('female')}
-                className={`py-4 px-4 text-lg rounded-lg border-2 ${
-                  userGender === 'female' 
-                    ? 'bg-pink-100 border-pink-500 text-pink-700 font-bold' 
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Female
-              </button>
-            </div>
-          </div>
-
-          {/* I want to chat with... selection */}
-          <div className="space-y-4">
-            <p className="block text-lg font-medium text-gray-700 text-center">I want to chat with...</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => selectPreferredGender('male')}
-                className={`py-3 px-2 text-lg rounded-lg border-2 ${
-                  preferredGender === 'male' 
-                    ? 'bg-blue-100 border-blue-500 text-blue-700 font-bold' 
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Males
-              </button>
-              <button
-                type="button"
-                onClick={() => selectPreferredGender('female')}
-                className={`py-3 px-2 text-lg rounded-lg border-2 ${
-                  preferredGender === 'female' 
-                    ? 'bg-pink-100 border-pink-500 text-pink-700 font-bold' 
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Females
-              </button>
-              <button
-                type="button"
-                onClick={() => selectPreferredGender('both')}
-                className={`py-3 px-2 text-lg rounded-lg border-2 ${
-                  preferredGender === 'both' 
-                    ? 'bg-purple-100 border-purple-500 text-purple-700 font-bold' 
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Both
-              </button>
-            </div>
-          </div>
-
-          <button 
-            className="w-full p-4 text-lg bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mt-4"
-            onClick={handleStartChat}
-            disabled={loading || (!isConnected && !error)}
-          >
-            {loading ? "Connecting..." : "Find Partner"}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // Tampilkan chat window sederhana
-  const renderChatWindow = () => {
-    // If partnerId is null but this component is being rendered,
-    // we need to force back to the gender selection screen
-    if (!partnerId) {
-      // Use setTimeout to avoid state changes during render
-      setTimeout(() => {
-        setShowGenderSelection(true);
-        setPartnerLeftNotification("Your chat partner has left the conversation.");
-      }, 0);
+  
+  return (
+    <div className="min-h-screen bg-black">
+      <Navbar />
       
-      // Return a loading state while the timeout executes
-      return (
-        <div className="flex items-center justify-center h-[calc(100vh-140px)]">
-          <div className="text-center">
-            <p>Chat has ended. Returning to selection screen...</p>
-            <div className="mt-4 flex justify-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce"></div>
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '600ms' }}></div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex flex-col h-[calc(100vh-140px)]">
-        <div className="p-4 bg-white shadow-sm flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
-              {partnerGender === 'male' ? 'M' : partnerGender === 'female' ? 'F' : '?'}
-            </div>
-            <div>
-              <div className="font-medium">Anonymous {partnerGender === 'male' ? 'Male' : partnerGender === 'female' ? 'Female' : 'Person'}</div>
-              <div className="text-xs text-gray-500">Connected</div>
-            </div>
-          </div>
-          
-          <button 
-            className="px-3 py-1 border border-red-500 text-red-500 rounded-md hover:bg-red-50"
-            onClick={endChat}
-          >
-            End Chat
-          </button>
-        </div>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-32 pb-20">
+        <h1 className="text-4xl sm:text-6xl font-bold text-white text-center mb-4">
+          Anonymous <span className="text-blue-500">Chat</span>
+        </h1>
+        <p className="text-gray-300 text-center mb-6 max-w-3xl mx-auto">
+          Chat secara anonim dengan orang lain berdasarkan preferensi kamu.
+          Temukan teman bicara baru tanpa perlu khawatir identitasmu terungkap.
+        </p>
         
-        <div className="flex-1 p-4 bg-gray-50 overflow-y-auto">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} mb-3`}
-            >
-              <div
-                className={`max-w-[75%] px-4 py-2 rounded-lg ${
-                  message.sender === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : message.sender === 'system'
-                    ? 'bg-gray-200 text-gray-800'
-                    : 'bg-gray-300 text-gray-800'
-                }`}
-              >
-                <div className="break-words">{message.text}</div>
-                <div className="text-xs opacity-70 text-right mt-1">
-                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-12 max-w-3xl mx-auto">
+          <div className="flex items-start">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <p className="text-yellow-300 text-sm">
+              <span className="font-medium">Peringatan:</span> Jangan bagikan informasi pribadi seperti nama lengkap, nomor telepon, alamat rumah, lokasi, atau data sensitif lainnya. Jagalah privasi dan keamananmu saat chatting dengan orang yang tidak dikenal.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-blue-900/30 to-black border border-blue-500/20 rounded-lg p-6 mb-10">
+          <h2 className="text-xl font-bold text-white mb-4">Profil & Preferensi Chat</h2>
+          
+          <div className="mb-4">
+            <div className="flex flex-col md:flex-row gap-4 mb-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1 text-gray-300">Nickname</label>
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  className="w-full bg-black/70 text-white border border-blue-500/30 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  placeholder="Your nickname"
+                  disabled={!!room}
+                />
+              </div>
+              
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1 text-gray-300">Gender</label>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value as Gender)}
+                  className="w-full bg-black/70 text-white border border-blue-500/30 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  disabled={!!room}
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1 text-gray-300">Looking For</label>
+                <select
+                  value={lookingFor}
+                  onChange={(e) => setLookingFor(e.target.value as PreferredGender)}
+                  className="w-full bg-black/70 text-white border border-blue-500/30 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  disabled={!!room}
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                  <option value="any">Anyone</option>
+                </select>
               </div>
             </div>
-          ))}
+            
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="text-sm font-medium mr-2 text-gray-400">Status:</span>
+                <span className={`inline-block px-2 py-1 rounded text-xs ${
+                  connectionStatus === 'connected' ? 'bg-green-100 text-green-800' : 
+                  connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-800' : 
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {connectionStatus}
+                </span>
+              </div>
+              
+              {!room && (
+                <button
+                  onClick={handleStartChat}
+                  disabled={connectionStatus !== 'connected' || isSearching}
+                  className={`px-4 py-2 rounded ${
+                    connectionStatus === 'connected' && !isSearching 
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                      : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  } transition-colors`}
+                >
+                  {isSearching ? 'Searching...' : 'Mulai Chat'}
+                </button>
+              )}
+              
+              {room && (
+                <button
+                  onClick={endChat}
+                  className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white transition-colors"
+                >
+                  Akhiri Chat
+                </button>
+              )}
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-500/20 border border-red-500/30 text-red-300 px-4 py-2 rounded-lg mb-4">
+              {error}
+            </div>
+          )}
         </div>
         
-        <form 
-          onSubmit={(e) => {
-            e.preventDefault();
-            const input = e.currentTarget.elements.namedItem('message') as HTMLInputElement;
-            if (input.value.trim()) {
-              sendMessage(input.value);
-              input.value = '';
-            }
-          }} 
-          className="p-4 border-t bg-white"
-        >
-          <div className="flex space-x-2">
+        <div className="bg-gradient-to-br from-gray-900/30 to-black border border-gray-700/30 rounded-lg p-6 mb-10">
+          <h2 className="text-xl font-bold text-white mb-4">Chat</h2>
+        
+          <div className="flex-1 bg-black/50 border border-gray-700/50 rounded-lg p-4 overflow-y-auto mb-4 min-h-[300px] max-h-[500px]">
+            {messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                {isSearching ? 'Mencari partner chat...' : 'Mulai chat untuk mengobrol dengan seseorang.'}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {messages.map((msg) => (
+                  <div 
+                    key={msg.id}
+                    className={`p-3 rounded max-w-[80%] ${
+                      msg.isSystem 
+                        ? 'bg-gray-800 text-gray-300 mx-auto text-center' 
+                        : msg.senderId === userId
+                          ? 'bg-blue-600 text-white ml-auto' 
+                          : 'bg-gray-700 text-white'
+                    }`}
+                  >
+                    <p>{msg.text}</p>
+                    <span className="text-xs opacity-75 block text-right">
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+                {partnerIsTyping && (
+                  <div className="p-3 rounded bg-gray-800 text-gray-300 max-w-[80%]">
+                    <span className="inline-block">
+                      <span className="typing-dot">.</span>
+                      <span className="typing-dot">.</span>
+                      <span className="typing-dot">.</span>
+                    </span>
+                  </div>
+                )}
+                <div ref={messageEndRef} />
+              </div>
+            )}
+          </div>
+          
+          <div className="flex gap-2">
             <input
               type="text"
-              name="message"
-              placeholder="Type a message..."
-              className="flex-1 p-2 border border-gray-300 rounded-md"
+              value={newMessage}
+              onChange={handleInputChange}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              className="flex-1 bg-black/70 text-white border border-gray-700/50 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              placeholder={room ? "Ketik pesan..." : "Mulai chat untuk mengirim pesan"}
+              disabled={!room}
             />
-            <button 
-              type="submit" 
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            <button
+              onClick={handleSendMessage}
+              disabled={!room || !newMessage.trim()}
+              className={`px-6 py-3 rounded ${
+                room && newMessage.trim() 
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                  : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+              } transition-colors`}
             >
-              Send
+              Kirim
             </button>
           </div>
-        </form>
-      </div>
-    );
-  };
-
-  return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <div className="p-4">
-        <Link href="/mini-games">
-          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+        </div>
+        
+        <div className="text-center mt-12">
+          <Link
+            href="/mini-games"
+            className="inline-flex items-center text-gray-400 hover:text-white transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to mini games
-          </button>
-        </Link>
+            Kembali ke Mini Games
+          </Link>
+        </div>
       </div>
-      <main className="flex-1 z-10">
-        {partnerId ? (
-          renderChatWindow()
-        ) : (
-          findingPartner ? renderFindingPartner() : renderProfileSelection()
-        )}
-      </main>
+      
+      <style jsx>{`
+        .typing-dot {
+          animation: typing 1.4s infinite ease-in-out;
+          animation-fill-mode: both;
+          font-size: 1.5rem;
+          display: inline-block;
+        }
+        .typing-dot:nth-child(2) {
+          animation-delay: 0.2s;
+        }
+        .typing-dot:nth-child(3) {
+          animation-delay: 0.4s;
+        }
+        @keyframes typing {
+          0% { opacity: 0.2; }
+          20% { opacity: 1; }
+          100% { opacity: 0.2; }
+        }
+      `}</style>
+      
+      <Footer />
     </div>
   );
 }

@@ -14,10 +14,21 @@ Aplikasi chat anonim yang memungkinkan pengguna berbicara dengan orang lain seca
 ## Teknologi
 
 - Next.js (React) untuk frontend
-- Firebase Firestore untuk database real-time
+- ~~Socket.io~~ Ably untuk komunikasi real-time (lihat [Ably Migration](#ably-migration))
 - TypeScript untuk type safety
 - Tailwind CSS untuk styling
-- Framer Motion untuk animasi
+
+## Ably Migration
+
+Aplikasi ini telah dimigrasi dari Socket.io ke Ably untuk mendukung deployment di lingkungan serverless Vercel. Ably menyediakan infrastruktur real-time yang dikelola yang bekerja lebih baik dengan fungsi serverless Vercel.
+
+### Menjalankan dengan Ably
+
+1. Daftar di [Ably](https://ably.com/) dan dapatkan API key
+2. Salin file `.env.local.example` menjadi `.env.local` dan isi dengan API key Ably Anda
+3. Jalankan aplikasi menggunakan perintah berikut
+
+Lihat [MIGRATION-GUIDE.md](./MIGRATION-GUIDE.md) untuk informasi lebih lanjut tentang migrasi.
 
 ## Sistem Identifikasi Pengguna
 
@@ -76,6 +87,10 @@ Fitur:
 ## Menjalankan Aplikasi
 
 ```bash
+# Buat file .env.local dengan API key Ably
+cp .env.local.example .env.local
+# Edit .env.local dengan API key Anda
+
 # Development dengan network access (untuk test multi-device)
 npm run dev:network
 
@@ -83,10 +98,16 @@ npm run dev:network
 npm run dev
 ```
 
+## Deployment ke Vercel
+
+1. Buat project baru di [Vercel](https://vercel.com/)
+2. Tambahkan environment variable `ABLY_API_KEY` dengan API key Ably Anda
+3. Deploy aplikasi ke Vercel
+
 ## Troubleshooting
 
 Jika mengalami masalah dengan koneksi antar perangkat:
-1. Bersihkan database dengan `/api/dev/clear-db`
-2. Bersihkan browser storage dengan `/api/dev/clear-browser-storage`
-3. Restart server development
-4. Coba koneksi dari dua perangkat berbeda
+1. Periksa konsol browser untuk error
+2. Verifikasi status koneksi Ably di dashboard Ably
+3. Pastikan API key Ably memiliki izin yang tepat (publish/subscribe, presence, history)
+4. Bersihkan browser storage dan coba lagi
