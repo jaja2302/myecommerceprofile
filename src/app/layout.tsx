@@ -4,6 +4,7 @@ import { Metadata } from 'next';
 import './globals.css';
 import { CookieConsent } from '@/components/CookieConsent';
 import { GoogleAnalytics } from '@/components/GoogleAnalytics';
+import { AuthProvider } from '@/context/AuthContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -42,9 +43,11 @@ export default function RootLayout({
         <meta property="og:type" content="website" />
       </head>
       <body className={`${inter.className} antialiased overflow-x-hidden`}>
-        <GoogleAnalytics />
-        {children}
-        <CookieConsent />
+        <AuthProvider>
+          <GoogleAnalytics />
+          {children}
+          <CookieConsent />
+        </AuthProvider>
       </body>
     </html>
   );

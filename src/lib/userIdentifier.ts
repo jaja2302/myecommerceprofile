@@ -6,7 +6,7 @@
  */
 
 import { getAuth, signInAnonymously as firebaseSignInAnonymously, User } from 'firebase/auth';
-import { firebaseApp } from './firebase';
+import { firebaseApp } from '@/lib/firebase';
 import { v4 as uuidv4 } from 'uuid';
 
 // Types for browser identification
