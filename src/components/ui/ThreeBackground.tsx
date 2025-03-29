@@ -30,6 +30,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
   const [pointer] = useState(new THREE.Vector2());
   const [hoveredPlanet, setHoveredPlanet] = useState<number | null>(null);
   const [mousePosition, setMousePosition] = useState(new THREE.Vector2());
+  const [isMounted, setIsMounted] = useState(false);
   
   // Define orbit positions and properties
   const orbits = colors.map((_, i) => {
@@ -37,22 +38,29 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
     const orbitRadius = 5; // Reduced orbit radius for better visibility
     const orbitX = Math.sin(angle) * orbitRadius;
     const orbitY = Math.cos(angle) * orbitRadius;
-    const orbitZ = (Math.random() - 0.5) * 2; // Less variation in Z axis
+    
+    // Use consistent values for server-side rendering
+    const orbitZ = (isMounted ? (Math.random() - 0.5) * 2 : 0); 
     
     return {
       position: new THREE.Vector3(orbitX, orbitY, orbitZ),
       rotation: new THREE.Euler(
         0, // Keep rotation more flat for better visibility
         0,
-        Math.random() * Math.PI * 0.5
+        isMounted ? Math.random() * Math.PI * 0.5 : 0
       ),
-      radius: 1.5 + Math.random() * 0.3, // Orbit path radius
-      speed: 0.2 + Math.random() * 0.1
+      radius: isMounted ? 1.5 + Math.random() * 0.3 : 1.65, // Use consistent values for SSR
+      speed: isMounted ? 0.2 + Math.random() * 0.1 : 0.25
     };
   });
   
   // Convert string colors to THREE.Color objects
   const threeColors = colors.map(color => new THREE.Color(color));
+
+  // Mark component as mounted after hydration
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Track mouse position for planet hover effects
   useEffect(() => {
@@ -120,16 +128,16 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
           orbitGroup.rotation.y += delta * orbits[index].speed;
         }
         
-        // Planet pulse effect on hover
+        // Planet pulse effect on hover - only when mounted (client-side)
         const planet = planetRefs.current[index];
-        if (planet && hoveredPlanet === index) {
+        if (planet && hoveredPlanet === index && isMounted) {
           // Apply pulsating scale to the hovered planet
-          const pulseScale = 1 + Math.sin(Date.now() * 0.005) * 0.1;
+          const pulseScale = 1 + Math.sin(performance.now() * 0.005) * 0.1;
           planet.scale.set(pulseScale, pulseScale, pulseScale);
           
           // Increase emissive intensity on hover
           if (planet.material instanceof THREE.MeshStandardMaterial) {
-            planet.material.emissiveIntensity = 1.5 + Math.sin(Date.now() * 0.003) * 0.5;
+            planet.material.emissiveIntensity = 1.5 + Math.sin(performance.now() * 0.003) * 0.5;
           }
         } else if (planet && hoveredPlanet !== index) {
           // Reset scale and emissive intensity when not hovered
@@ -206,7 +214,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
   };
 
   const createHyperSpace = useCallback(() => {
-    if (!hyperSpaceRef.current) return;
+    if (!hyperSpaceRef.current || !isMounted) return;
     
     // Clear existing children
     while (hyperSpaceRef.current.children.length > 0) {
@@ -244,7 +252,14 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
       
       hyperSpaceRef.current.add(line);
     }
-  }, [focusedTech, threeColors]);
+  }, [focusedTech, threeColors, isMounted]);
+
+  // Create hyperspace effect when component is mounted
+  useEffect(() => {
+    if (isMounted) {
+      createHyperSpace();
+    }
+  }, [createHyperSpace, isMounted]);
 
   // Create hyperspace effect
   useEffect(() => {
@@ -255,7 +270,6 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
         
         // Show hyperspace effect during travel
         setShowHyperspace(true);
-        createHyperSpace();
         
         // Calculate camera position for viewing the orbit
         const orbitData = orbits[focusedTech];
@@ -362,7 +376,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
       setShowHyperspace(false);
       setIsAnimating(false);
     }
-  }, [focusedTech, camera, onFocusComplete, orbits, showHyperspace, createHyperSpace]);
+  }, [focusedTech, camera, onFocusComplete, orbits, showHyperspace]);
 
   return (
     <>
@@ -389,7 +403,7 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
               <meshStandardMaterial
                 color="#ff9900"
                 emissive="#ffaa00"
-                emissiveIntensity={1.5 + Math.sin(Date.now() * 0.001) * 0.5}
+                emissiveIntensity={isMounted ? 1.5 + Math.sin(performance.now() * 0.001) * 0.5 : 1.5}
                 transparent={true}
                 opacity={0.8}
               />
@@ -474,7 +488,9 @@ function Particles({ colors, focusedTech, onFocusComplete, onOrbitClick }: {
                 
                 {/* Moons - more detailed and with unique orbits */}
                 {Array.from({ length: i % 3 + 1 }).map((_, moonIndex) => {
-                  const moonAngle = (Date.now() * 0.001 + moonIndex * Math.PI * 0.6) % (Math.PI * 2);
+                  const moonAngle = isMounted ? 
+                    (performance.now() * 0.001 + moonIndex * Math.PI * 0.6) % (Math.PI * 2) : 
+                    (moonIndex * Math.PI * 0.6) % (Math.PI * 2);
                   const moonDistance = 0.8 + moonIndex * 0.2;
                   const moonSize = 0.15 - moonIndex * 0.03;
                   
@@ -667,18 +683,22 @@ function CameraShake({
 }: CameraShakeProps) {
   const { camera } = useThree();
   const initialRotation = useRef(new THREE.Euler(0, 0, 0));
+  const isMounted = useRef(false);
   
   useEffect(() => {
     initialRotation.current.copy(camera.rotation);
+    isMounted.current = true;
   }, [camera]);
   
   useFrame(() => {
     if (intensity === 0) return;
     
-    // Calculate random rotational offsets based on frequency
-    const yawOffset = Math.sin(Date.now() * 0.001 * yawFrequency) * maxYaw * intensity;
-    const pitchOffset = Math.sin(Date.now() * 0.001 * pitchFrequency) * maxPitch * intensity;
-    const rollOffset = Math.sin(Date.now() * 0.001 * rollFrequency) * maxRoll * intensity;
+    // Animation offset calculations
+    if (!isMounted.current) return;
+    
+    const yawOffset = Math.sin(performance.now() * 0.001 * yawFrequency) * maxYaw * intensity;
+    const pitchOffset = Math.sin(performance.now() * 0.001 * pitchFrequency) * maxPitch * intensity;
+    const rollOffset = Math.sin(performance.now() * 0.001 * rollFrequency) * maxRoll * intensity;
     
     // Apply to camera rotation
     camera.rotation.set(

@@ -28,29 +28,30 @@ export default function Home() {
       <Navbar />
       <HeroSection />
       
-      <section id="about">
-        <h1 className="text-4xl font-bold text-center mb-8">Tentang El Shop</h1>
+      <section id="about" className="py-12 sm:py-20 bg-black">
+        <h1 className="text-4xl font-bold text-center mb-8 text-white">Tentang El Shop</h1>
         <CompanyProfile />
       </section>
       
-      <section id="products" className="py-12 sm:py-20">
+      <section id="products" className="py-12 sm:py-20 bg-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <h2 className="text-3xl font-bold mb-8">Produk Kami</h2>
+          <h2 className="text-3xl font-bold mb-8 text-white">Produk Kami</h2>
           <ProductList />
         </div>
       </section>
 
-      <section id="tech-stack" className="mx-auto">
+      <section id="tech-stack" className="mx-auto bg-black">
         <TechStack />
       </section>
       
-      <section id="testimonials" className="py-12 sm:py-20">
+      <section id="testimonials" className="py-12 sm:py-20 bg-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <h2 className="text-3xl font-bold mb-8 text-white">Testimonial</h2>
           <AnimatedTestimonials testimonials={testimonials} />
         </div>
       </section>
       
-      <section id="contact" className="py-12 sm:py-20">
+      <section id="contact" className="py-12 sm:py-20 bg-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <ContactSection />
         </div>

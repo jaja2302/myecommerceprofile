@@ -54,9 +54,9 @@ export interface TypingIndicator {
 }
 
 export interface AuthContextType {
-  user: any;
+  user: User | null;
   loading: boolean;
-  login: () => Promise<any>;
+  login: () => Promise<User | null>;
 }
 
 export interface ChatHookReturn {

@@ -13,6 +13,33 @@ html, body {
   margin: 0;
 }
 
+/* Apply better contrast for text on dark backgrounds */
+.text-white {
+  color: #ffffff !important;
+}
+
+.text-gray-300 {
+  color: #cbd5e1 !important;
+}
+
+.text-purple-500 {
+  color: #a855f7 !important;
+}
+
+.bg-purple-500, .from-purple-500, .to-purple-500, .via-purple-500 {
+  --tw-bg-opacity: 1;
+  --tw-gradient-stops: #a855f7;
+  background-color: rgba(168, 85, 247, var(--tw-bg-opacity)) !important;
+}
+
+.from-indigo-500 {
+  --tw-gradient-from: #6366f1 !important;
+}
+
+.to-pink-500 {
+  --tw-gradient-to: #ec4899 !important;
+}
+
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-start-rgb: 0, 0, 0;
@@ -189,4 +216,36 @@ html {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Typography improvements for dark mode */
+h1, h2, h3, h4, h5, h6 {
+  color: #ffffff;
+}
+
+/* Override typography styles for better contrast */
+.text-transparent.bg-clip-text.bg-gradient-to-r {
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  color: transparent !important;
+  background-image: linear-gradient(to right, #6366f1, #a855f7, #ec4899) !important;
+}
+
+/* Enhancements for buttons and interactive elements */
+.bg-gradient-to-r.from-indigo-500.via-purple-500.to-pink-500 {
+  background-image: linear-gradient(to right, #6366f1, #a855f7, #ec4899) !important;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+}
+
+/* Fix for nav.download button */
+a.nav-download, button.nav-download {
+  color: #ffffff !important;
+  background-image: linear-gradient(to right, #6366f1, #a855f7, #ec4899) !important;
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px;
+  font-weight: 500;
+  transition: all 0.2s;
+  box-shadow: 0 4px 10px rgba(168, 85, 247, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }

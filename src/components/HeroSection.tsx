@@ -11,11 +11,31 @@ import Image from "next/image";
 export function HeroSection() {
   const { t } = useTranslation();
 
+  // Gunakan teks literal sebagai alternatif jika kunci terjemahan tidak dapat diakses
+  const fallbackTexts = {
+    innovative: "Mobile Apps.",
+    powerful: "Web Apps.",
+    seamless: "E-commerce.",
+    beautiful: "Solutions.",
+    description: "Hi! welcome to Elshop, I'm a passionate developer creating high-quality applications. Browse my collection of apps and digital solutions available for purchase.",
+    viewApps: "View Apps",
+    aboutMe: "About Me",
+    featuredApp: "Featured App",
+    checkOut: "Check out my latest creation"
+  };
+
+  // Check apakah terjemahan tersedia, jika tidak gunakan fallback
+  const getText = (key: string, fallback: string) => {
+    const translated = t(key);
+    // Jika hasil translate sama dengan key, artinya tidak ada terjemahan
+    return translated === key ? fallback : translated;
+  };
+
   const words = [
-    { text: t('hero.words.innovative') },
-    { text: t('hero.words.powerful') },
-    { text: t('hero.words.seamless') },
-    { text: t('hero.words.beautiful') },
+    { text: getText('hero.words.innovative', fallbackTexts.innovative) },
+    { text: getText('hero.words.powerful', fallbackTexts.powerful) },
+    { text: getText('hero.words.seamless', fallbackTexts.seamless) },
+    { text: getText('hero.words.beautiful', fallbackTexts.beautiful) },
   ];
 
   return (
@@ -49,15 +69,15 @@ export function HeroSection() {
             />
           </div>
           <p className="text-lg sm:text-xl text-gray-300 max-w-xl mx-auto lg:mx-0">
-            {t('hero.description')}
+            {getText('hero.description', fallbackTexts.description)}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 pt-4 items-center justify-center lg:justify-start">
             <motion.button 
-              className="w-full sm:w-auto px-6 sm:px-8 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white font-medium rounded-full hover:opacity-90 transition-all"
+              className="w-full sm:w-auto px-6 sm:px-8 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white font-medium rounded-full hover:opacity-90 transition-all border border-white/30 shadow-lg shadow-purple-500/30"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              View Apps
+              {getText('hero.buttons.getStarted', fallbackTexts.viewApps)}
             </motion.button>
             <motion.button 
               className="w-full sm:w-auto px-6 sm:px-8 py-3 border border-white/30 text-white font-medium rounded-full hover:bg-white/10 transition-all backdrop-blur-sm"
@@ -67,7 +87,7 @@ export function HeroSection() {
                 document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              About Me
+              {getText('hero.buttons.learnMore', fallbackTexts.aboutMe)}
             </motion.button>
           </div>
         </div>
@@ -88,8 +108,8 @@ export function HeroSection() {
                   className="rounded-[14px] w-full h-auto" 
                 />
                 <div className="p-4">
-                  <h3 className="text-white font-medium text-lg">Featured App</h3>
-                  <p className="text-gray-300 text-sm">Check out my latest creation</p>
+                  <h3 className="text-white font-medium text-lg">{getText('hero.appCard.title', fallbackTexts.featuredApp)}</h3>
+                  <p className="text-gray-300 text-sm">{getText('hero.appCard.subtitle', fallbackTexts.checkOut)}</p>
                 </div>
               </div>
             </BackgroundGradient>

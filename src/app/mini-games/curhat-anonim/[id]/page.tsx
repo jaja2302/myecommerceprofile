@@ -54,7 +54,7 @@ interface Comment {
 
 export default function CurhatDetail() {
   const params = useParams();
-  const curhatId = params.id as string;
+  const curhatId = params?.id as string;
 
   const [userId, setUserId] = useState<string | null>(null);
   const [curhat, setCurhat] = useState<Curhat | null>(null);

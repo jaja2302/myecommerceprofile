@@ -105,7 +105,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
     console.error('Socket initialization timeout');
     isInitializing = false;
     res.status(500).end();
-  }, 10000);
+  }, 5000);
 
   try {
     console.log('Setting up socket.io server');
@@ -119,10 +119,10 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Client-Id', 'X-Client-Time'],
       },
       allowEIO3: true, // Allow compatibility with older clients
-      connectTimeout: 60000, // Increase connection timeout further
+      connectTimeout: 30000, // Reduced from 60000 to 30000ms
       transports: ['polling', 'websocket'], // Try polling first as it's more reliable for initial connection
-      pingTimeout: 120000, // Longer ping timeout
-      pingInterval: 20000, // More frequent ping to keep connection alive
+      pingTimeout: 60000, // Reduced from 120000 to 60000ms
+      pingInterval: 25000, // Increased from 20000 to 25000ms
       cookie: false, // Disable socket.io cookies to avoid SameSite issues
       // Increase socket server stability
       maxHttpBufferSize: 1e8, // 100 MB
@@ -130,7 +130,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
         threshold: 1024, // 1KB
       },
       // Engine.IO options
-      upgradeTimeout: 30000, // Give more time for upgrades
+      upgradeTimeout: 15000, // Reduced from 30000 to 15000ms
     });
     
     // Simpan instance io ke server untuk digunakan kembali
@@ -147,7 +147,6 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
       
       // Track the user ID for this socket connection
       let currentUserId: string | null = null;
-      let currentSessionId: string | null = null;
       
       // Event test untuk mengecek koneksi
       socket.on('test', (data) => {
@@ -216,7 +215,6 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
           
           // Track this sessionId for the current socket
           currentUserId = userId;
-          currentSessionId = sessionId;
           
           // Join room socket dengan ID session
           console.log(`Joining socket ${socket.id} to room ${sessionId}`);
@@ -243,9 +241,6 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
           // Make sure we're in the right room
           console.log(`Socket ${socket.id} joining room ${sessionId} for find_partner`);
           socket.join(sessionId);
-          
-          // Store current session for this socket
-          currentSessionId = sessionId;
           
           // Check if session exists and update current user if needed
           const session = chatSessions[sessionId];
@@ -442,7 +437,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
         const sessionsToCleanup: string[] = [];
         
         // This is just a best-effort approach since we don't store socket.id in sessions
-        Object.entries(chatSessions).forEach(([sessionId, session]) => {
+        Object.entries(chatSessions).forEach(([sessionId]) => {
           // If we find a session that might be associated with this socket
           try {
             // We can check if the socket is in the room for this session
@@ -451,6 +446,7 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
               sessionsToCleanup.push(sessionId);
             }
           } catch (e) {
+            console.error(`Error checking socket room for session ${sessionId}:`, e);
             // Ignore errors in socket room checking
           }
         });

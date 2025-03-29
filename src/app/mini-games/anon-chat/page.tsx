@@ -467,9 +467,7 @@ export default function AnonChatPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-      <div className="sticky top-0 z-50">
-        <Navbar showBackButton title="Anonymous Chat" />
-      </div>
+
 
       <main className="flex-1 z-10">
         {partnerId ? (

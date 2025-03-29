@@ -25,8 +25,15 @@ interface TechOrbitalProps {
 export function TechOrbital({ techStack }: TechOrbitalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<HTMLDivElement>(null);
+  const textRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [hoveredTech, setHoveredTech] = useState<number | null>(null);
   const [isBurstActive, setIsBurstActive] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Mark component as mounted after hydration to avoid mismatches
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   useEffect(() => {
     if (!orbitRef.current) return;
@@ -59,17 +66,21 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
     };
   }, []);
 
-  // Periodic burst animation
+  // Periodic burst animation - only run on client
   useEffect(() => {
+    if (!isMounted) return;
+    
     const interval = setInterval(() => {
       setIsBurstActive(true);
       setTimeout(() => setIsBurstActive(false), 1500);
     }, 10000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [isMounted]);
 
   useEffect(() => {
+    if (!isMounted) return;
+    
     techStack.forEach((tech, index) => {
       if (!orbitRef.current) return;
       gsap.to(`#tech-${index}`, {
@@ -80,7 +91,19 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
         transformOrigin: "center center"
       });
     });
-  }, [techStack]);
+  }, [techStack, isMounted]);
+
+  // Pre-calculate particle sizes and positions for server-side rendering consistency
+  const particles = Array.from({ length: 50 }).map((_, i) => {
+    return {
+      size: isMounted ? Math.random() * 3 + 1 : 2,
+      delay: isMounted ? Math.random() * 5 : i * 0.1,
+      x: isMounted ? (Math.random() - 0.5) * 400 : (i % 10) * 40 - 200,
+      y: isMounted ? (Math.random() - 0.5) * 400 : Math.floor(i / 10) * 40 - 100,
+      z: isMounted ? (Math.random() - 0.5) * 400 : 0,
+      scale: isMounted ? Math.random() * 0.5 + 0.5 : 0.7
+    };
+  });
   
   return (
     <div 
@@ -241,9 +264,7 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
       
       {/* Interactive particle effects */}
       <div className="absolute inset-0 overflow-hidden">
-        {Array.from({ length: 50 }).map((_, i) => {
-          const size = Math.random() * 3 + 1;
-          const delay = Math.random() * 5;
+        {particles.map((particle, i) => {
           const techIndex = i % techStack.length;
           const isHighlighted = hoveredTech === techIndex;
           
@@ -251,32 +272,48 @@ export function TechOrbital({ techStack }: TechOrbitalProps) {
             <motion.div
               key={i}
               className="absolute rounded-full pointer-events-none"
-              initial={{ 
-                opacity: 0,
-                x: (Math.random() - 0.5) * 400, 
-                y: (Math.random() - 0.5) * 400,
-                z: (Math.random() - 0.5) * 400,
-                scale: Math.random() * 0.5 + 0.5
+              style={{
+                backgroundColor: techStack[techIndex].color,
+                width: `${particle.size}px`,
+                height: `${particle.size}px`,
+                x: particle.x,
+                y: particle.y,
+                z: particle.z,
+                scale: particle.scale,
+                opacity: 0.6
               }}
-              animate={{ 
-                opacity: isHighlighted ? [0, 0.8, 0] : [0, 0.5, 0],
-                scale: [0, isHighlighted ? Math.random() * 0.8 + 0.7 : Math.random() * 0.5 + 0.5, 0]
+              animate={{
+                scale: [0, isHighlighted ? (isMounted ? Math.random() * 0.8 + 0.7 : 0.9) : particle.scale, 0]
               }}
               transition={{
-                duration: isHighlighted ? 0.8 : 1,
+                duration: isHighlighted ? 2 : 3,
                 repeat: Infinity,
-                delay: delay,
+                delay: particle.delay,
                 ease: "easeInOut"
-              }}
-              style={{
-                width: size,
-                height: size,
-                backgroundColor: techStack[techIndex].color,
-                transform: `translate3d(0, 0, ${(Math.random() - 0.5) * 200}px)`
               }}
             />
           );
         })}
+      </div>
+      
+      {/* Background scattered tech names */}
+      <div className="absolute inset-0 overflow-hidden">
+        {techStack.map((tech, i) => (
+          <motion.div
+            key={i}
+            ref={(el) => {
+              const refs = (textRefs.current = textRefs.current || []);
+              refs[i] = el;
+            }}
+            className="absolute text-xs font-bold opacity-10 pointer-events-none"
+            style={{
+              color: tech.color,
+              transform: `translate3d(0, 0, ${isMounted ? (Math.random() - 0.5) * 200 : 0}px)`
+            }}
+          >
+            {tech.name}
+          </motion.div>
+        ))}
       </div>
     </div>
   );

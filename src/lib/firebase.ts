@@ -14,13 +14,13 @@ import {
   updateDoc, 
   setDoc,
   Unsubscribe,
-  DocumentData,
   orderBy,
   writeBatch,
   getDocs,
   limit,
 } from "firebase/firestore";
 import { Gender, PreferredGender, User, Message } from "@/types";
+import { Timestamp } from "firebase/firestore";
 
 // Your Firebase configuration
 // Replace with your own Firebase config
@@ -220,8 +220,8 @@ export const findMatchFromRequests = async (
       preferredGender: PreferredGender;
       gender: Gender;
       status: string;
-      expiresAt: any; // Can be Date, Timestamp, or undefined
-      createdAt: any;
+      expiresAt: Date | Timestamp | undefined;
+      createdAt: Date | Timestamp;
       matchAttempts: number;
     }
     
@@ -230,8 +230,9 @@ export const findMatchFromRequests = async (
       .map(doc => ({id: doc.id, ...doc.data()} as MatchRequest))
       .filter(request => {
         // Skip expired requests
-        const expiryTime = request.expiresAt?.toDate?.() || request.expiresAt;
-        if (expiryTime && new Date(expiryTime) < new Date()) {
+        const expiryTime = request.expiresAt;
+        const expiryDate = expiryTime instanceof Timestamp ? expiryTime.toDate() : expiryTime;
+        if (expiryDate && new Date(expiryDate) < new Date()) {
           console.log(`[MATCH] Request ${request.id} for user ${request.userId} is expired`);
           return false;
         }

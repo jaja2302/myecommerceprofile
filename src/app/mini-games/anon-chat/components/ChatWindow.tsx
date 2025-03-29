@@ -11,7 +11,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 
 interface ChatWindowProps {
-  sessionId: string;
   partnerId: string;
   partnerGender: Gender | null;
   messages: ChatMessage[];
@@ -20,7 +19,6 @@ interface ChatWindowProps {
 }
 
 export function ChatWindow({
-  sessionId,
   partnerId,
   partnerGender,
   messages,
@@ -82,48 +80,48 @@ export function ChatWindow({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)]">
-      <div className="p-4 bg-white shadow-sm flex items-center justify-between">
-        <div className="flex items-center space-x-3">
+    <div className="flex flex-col h-full max-h-[calc(100vh-120px)] sm:h-[calc(100vh-140px)]">
+      <div className="p-2 sm:p-4 bg-white shadow-sm flex items-center justify-between">
+        <div className="flex items-center space-x-2 sm:space-x-3">
           <Avatar className={getPartnerColor()}>
             <AvatarFallback className="text-white">{getPartnerInitial()}</AvatarFallback>
           </Avatar>
           <div>
-            <div className="font-medium">Anonymous {partnerGender === 'male' ? 'Male' : partnerGender === 'female' ? 'Female' : 'Person'}</div>
+            <div className="font-medium text-sm sm:text-base">Anonymous {partnerGender === 'male' ? 'Male' : partnerGender === 'female' ? 'Female' : 'Person'}</div>
             <div className="text-xs text-muted-foreground">
               {partnerId ? 'Connected' : 'Disconnected'}
             </div>
           </div>
         </div>
         
-        <Button variant="outline" size="sm" className="text-red-500" onClick={handleEndChat}>
-          <X className="h-4 w-4 mr-2" />
-          End Chat
+        <Button variant="outline" size="sm" className="text-red-500 px-2 py-1 sm:px-3 sm:py-2" onClick={handleEndChat}>
+          <X className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+          <span className="text-xs sm:text-sm">End Chat</span>
         </Button>
       </div>
       
-      <ScrollArea className="flex-1 p-4 bg-gray-50">
-        <div className="space-y-4">
+      <ScrollArea className="flex-1 p-2 sm:p-4 bg-gray-50">
+        <div className="space-y-3">
           {messages.map((message) => (
             <div
               key={message.id}
               className={`flex ${message.sender === 'system' ? 'justify-center' : message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               {message.sender === 'system' ? (
-                <div className="bg-muted px-3 py-2 rounded-md text-xs text-muted-foreground flex items-center space-x-1 max-w-[80%]">
+                <div className="bg-muted px-2 py-1 sm:px-3 sm:py-2 rounded-md text-xs text-muted-foreground flex items-center space-x-1 max-w-[85%]">
                   <Info className="h-3 w-3" />
                   <span>{message.text}</span>
                 </div>
               ) : (
                 <div
-                  className={`max-w-[75%] px-4 py-2 rounded-lg ${
+                  className={`max-w-[80%] px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg ${
                     message.sender === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-secondary text-secondary-foreground'
                   }`}
                 >
-                  <div className="break-words">{message.text}</div>
-                  <div className="text-xs opacity-70 text-right mt-1">
+                  <div className="break-words text-sm">{message.text}</div>
+                  <div className="text-xs opacity-70 text-right mt-0.5 sm:mt-1">
                     {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
@@ -135,27 +133,27 @@ export function ChatWindow({
       </ScrollArea>
       
       {error && (
-        <Alert variant="destructive" className="mx-4 mb-2">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>{error}</AlertTitle>
+        <Alert variant="destructive" className="mx-2 sm:mx-4 mb-1 sm:mb-2 py-1.5 sm:py-2">
+          <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4" />
+          <AlertTitle className="text-xs sm:text-sm">{error}</AlertTitle>
         </Alert>
       )}
       
-      <form onSubmit={handleSendMessage} className="p-4 border-t bg-white">
+      <form onSubmit={handleSendMessage} className="p-2 sm:p-4 border-t bg-white">
         <div className="flex space-x-2">
           <Input
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
             disabled={sending || !partnerId}
-            className="flex-1"
+            className="flex-1 h-9 sm:h-10 text-sm"
           />
-          <Button type="submit" disabled={!newMessage.trim() || sending || !partnerId}>
+          <Button type="submit" size="sm" className="h-9 sm:h-10 w-9 sm:w-10 p-0" disabled={!newMessage.trim() || sending || !partnerId}>
             <Send className="h-4 w-4" />
           </Button>
         </div>
         {!partnerId && (
-          <div className="mt-2 text-center text-xs text-red-500">
+          <div className="mt-1 sm:mt-2 text-center text-xs text-red-500">
             Chat has ended. The message input is disabled.
           </div>
         )}
