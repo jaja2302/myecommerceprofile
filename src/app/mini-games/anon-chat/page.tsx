@@ -28,6 +28,23 @@ export default function AnonChatPage() {
   const [partnerLeftNotification, setPartnerLeftNotification] = useState<string | null>(null);
   const lastPartnerIdRef = useRef<string | null>(null);
 
+  // Effect to auto-reload page after 3 seconds if still connecting
+  useEffect(() => {
+    let reloadTimer: NodeJS.Timeout | null = null;
+    
+    if (!isConnected && !error) {
+      reloadTimer = setTimeout(() => {
+        // Auto reload the page after 3 seconds of connection issue
+        window.location.reload();
+      }, 3000);
+    }
+    
+    return () => {
+      if (reloadTimer) {
+        clearTimeout(reloadTimer);
+      }
+    };
+  }, [isConnected, error]);
 
   // Effect to monitor sessionId changes and trigger partner finding
   useEffect(() => {
@@ -220,6 +237,13 @@ export default function AnonChatPage() {
             Chat anonymously with random people
           </p>
           
+          {/* Error Message */}
+          {errorMessage && (
+            <div className="mt-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+              <p>{errorMessage}</p>
+            </div>
+          )}
+          
           {/* Partner Left Notification */}
           {partnerLeftNotification && (
             <div className="mt-3 p-3 bg-amber-100 border border-amber-400 text-amber-700 rounded-md text-sm">
@@ -314,7 +338,7 @@ export default function AnonChatPage() {
                     : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                Anyone
+                Both
               </button>
             </div>
           </div>
@@ -453,4 +477,4 @@ export default function AnonChatPage() {
       </main>
     </div>
   );
-} 
+}

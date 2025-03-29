@@ -27,11 +27,6 @@ export interface ChatHookReturn {
   error: string | null;
 }
 
-interface FindPartnerParams {
-  gender: Gender;
-  lookingFor: PreferredGender;
-}
-
 export function useAnonChat(): ChatHookReturn {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [socketInitialized, setSocketInitialized] = useState<boolean>(false);
@@ -65,6 +60,7 @@ export function useAnonChat(): ChatHookReturn {
       }
       userIdRef.current = userId;
     } catch (e) {
+      console.error('Error getting user ID:', e);
       // Fallback jika localStorage tidak tersedia
       if (!userIdRef.current) {
         userIdRef.current = `user_${uuidv4()}`;
@@ -86,7 +82,7 @@ export function useAnonChat(): ChatHookReturn {
     // Clean up socket if it exists
     if (socket) {
       try {
-        console.log('Cleaning up socket connection');
+        // console.log('Cleaning up socket connection');
         socket.removeAllListeners();
         socket.disconnect();
       } catch (e) {
@@ -104,7 +100,7 @@ export function useAnonChat(): ChatHookReturn {
   useEffect(() => {
     // Start heartbeat only when socket is connected and session exists
     if (socket && socket.connected && sessionId) {
-      console.log('Starting heartbeat');
+      // console.log('Starting heartbeat');
       
       // Send initial heartbeat
       socket.emit('heartbeat', { sessionId });
@@ -171,17 +167,17 @@ export function useAnonChat(): ChatHookReturn {
 
         setSocketError(false);
         setReconnecting(true);
-        console.log('Initializing WebSocket connection... Attempt:', socketAttempts.current);
+        // console.log('Initializing WebSocket connection... Attempt:', socketAttempts.current);
         
         // Add network connection check
         if (isBrowser && navigator.onLine === false) {
-          console.warn('Browser reports offline status. Waiting for online status...');
+          // console.warn('Browser reports offline status. Waiting for online status...');
           setError('Perangkat Anda sedang offline. Tunggu hingga koneksi tersedia.');
           
           // Wait for online status before continuing
           if (window) {
             const handleOnline = () => {
-              console.log('Device is now online, attempting connection...');
+              // console.log('Device is now online, attempting connection...');
               window.removeEventListener('online', handleOnline);
               
               // Reset socket attempts for a fresh try
@@ -203,14 +199,14 @@ export function useAnonChat(): ChatHookReturn {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
           
-          console.log('Testing API endpoint before socket connection...');
-          const response = await fetch('/api/socket', { 
-            method: 'GET',
-            signal: controller.signal
-          });
+          // // console.log('Testing API endpoint before socket connection...');
+          // const response = await fetch('/api/socket', { 
+          //   method: 'GET',
+          //   signal: controller.signal
+          // });
           
           clearTimeout(timeoutId);
-          console.log('API endpoint test response:', response.status);
+          // console.log('API endpoint test response:', response.status);
         } catch (error) {
           console.warn('API endpoint test failed, but continuing with socket connection:', error);
         }
@@ -220,7 +216,7 @@ export function useAnonChat(): ChatHookReturn {
         
         // Dapatkan host URL dari window.location untuk memastikan koneksi ke host yang benar
         const origin = isBrowser ? window.location.origin : '';
-        console.log('Connecting to socket server at:', origin);
+        // console.log('Connecting to socket server at:', origin);
         
         // Buat instance Socket.io
         const connectionOpts = {
@@ -242,12 +238,12 @@ export function useAnonChat(): ChatHookReturn {
           }
         };
         
-        console.log('Socket.io connection options:', connectionOpts);
+        // console.log('Socket.io connection options:', connectionOpts);
         
         // Create socket with optimized configuration
         const newSocket = io(origin, connectionOpts);
         
-        console.log('Socket.io instance created, waiting for connection...');
+        // console.log('Socket.io instance created, waiting for connection...');
         
         // Add explicit error handler for XHR failures
         newSocket.io.on('error', (error: Error) => {
@@ -257,25 +253,22 @@ export function useAnonChat(): ChatHookReturn {
         
         // Handle connection error events more gracefully
         // Using "on" with "as any" to handle type issues with Socket.io types
-        (newSocket.io.engine as any).on('transport_error', (error: any) => {
-          console.warn('Transport error (usually polling):', error);
-          // Try to switch to websocket if polling fails
-          if (newSocket.io.engine.transport.name === 'polling') {
-            console.log('Polling failed, trying WebSocket transport');
-            newSocket.io.engine.transport.once('open', () => {
-              console.log('WebSocket transport now open');
-            });
-          }
-        });
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        (newSocket.io.engine as any).on('transport_error', ((error: unknown) => {
+          console.error('Transport error:', error);
+          setSocketError(true);
+          setError(`Tidak dapat terhubung ke server chat: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          setIsConnected(false);
+        }) as (error: unknown) => void);
         
-        // Track connect_error
-        (newSocket.io.engine as any).on('close', (reason: string) => {
+        (newSocket.io.engine as any).on('close', ((reason: string) => {
           console.warn('Engine close event:', reason);
-        });
+        }) as (reason: string) => void);
+        /* eslint-enable @typescript-eslint/no-explicit-any */
         
         // Tambahkan event listener
         newSocket.on('connect', () => {
-          console.log('Connected to WebSocket server with ID:', newSocket.id);
+          // console.log('Connected to WebSocket server with ID:', newSocket.id);
           setSocketInitialized(true);
           setReconnecting(false);
           setSocketError(false);
@@ -285,7 +278,7 @@ export function useAnonChat(): ChatHookReturn {
           setError(null);
           
           // Kirim login event untuk menguji koneksi
-          console.log('Sending test event to server...');
+          // console.log('Sending test event to server...');
           newSocket.emit('test', { userId: userIdRef.current });
         });
         
@@ -296,12 +289,12 @@ export function useAnonChat(): ChatHookReturn {
           setIsConnected(false);
         });
         
-        newSocket.io.on('reconnect_attempt', (attempt) => {
-          console.log(`Socket.io reconnect attempt ${attempt}`);
+        newSocket.io.on('reconnect_attempt', () => {
+          // Log removed to avoid unused variable warning
         });
         
-        newSocket.io.on('reconnect', (attempt) => {
-          console.log(`Socket.io reconnected after ${attempt} attempts`);
+        newSocket.io.on('reconnect', (_attempt) => {
+          console.log(`Socket.io reconnected after ${_attempt} attempts`);
           setIsConnected(true);
           setSocketError(false);
           setError(null);
@@ -314,14 +307,14 @@ export function useAnonChat(): ChatHookReturn {
         });
         
         newSocket.on('session_created', (data) => {
-          console.log(`Session created:`, data);
+          // console.log(`Session created:`, data);
           if (data && data.sessionId) {
             setSessionId(data.sessionId);
           }
         });
         
         newSocket.on('partner_found', (data) => {
-          console.log(`Partner found:`, data);
+          // console.log(`Partner found:`, data);
           if (data) {
             setPartnerId(data.partnerId);
             setPartnerGender(data.partnerGender);
@@ -331,18 +324,18 @@ export function useAnonChat(): ChatHookReturn {
         });
         
         newSocket.on('no_partner_found', () => {
-          console.log('No partner found');
+          // console.log('No partner found');
           setLoading(false);
           setError('Tidak ada partner yang tersedia saat ini. Coba lagi nanti.');
         });
         
         newSocket.on('new_message', (message) => {
-          console.log('Message received:', message);
+          // console.log('Message received:', message);
           // Check if this message is already in our messages array
           setMessages(prev => {
             // Check if we already have this message (by id)
             if (prev.some(m => m.id === message.id)) {
-              console.log('Duplicate message detected, ignoring:', message.id);
+              // console.log('Duplicate message detected, ignoring:', message.id);
               return prev;
             }
             return [...prev, message];
@@ -350,7 +343,7 @@ export function useAnonChat(): ChatHookReturn {
         });
         
         newSocket.on('chat_ended', (data) => {
-          console.log('Chat ended event received:', data);
+          // console.log('Chat ended event received:', data);
           
           // Immediately clear partner information
           setPartnerId(null);
@@ -376,12 +369,12 @@ export function useAnonChat(): ChatHookReturn {
               detail: { message: data?.message || 'Chat has ended' } 
             });
             window.dispatchEvent(customEvent);
-            console.log('Dispatched anonchat_partner_left event');
+            // console.log('Dispatched anonchat_partner_left event');
           }
         });
         
         newSocket.on('disconnect', (reason) => {
-          console.log('Disconnected from WebSocket server, reason:', reason);
+          // console.log('Disconnected from WebSocket server, reason:', reason);
           if (reason === 'io server disconnect') {
             // Server memutuskan koneksi, coba reconnect
             newSocket.connect();
@@ -419,15 +412,16 @@ export function useAnonChat(): ChatHookReturn {
   
   // Coba terhubung kembali jika koneksi terputus
   useEffect(() => {
+    // This effect is meant to reconnect when the socket connection has an error
     if (socketError && !reconnecting && !initializingRef.current) {
       const reconnectTimer = setTimeout(() => {
-        console.log('Attempting to reconnect...');
+        // console.log('Attempting to reconnect...');
         setSocketInitialized(false); // Ini akan memicu useEffect di atas untuk menginisialisasi ulang socket
       }, 3000);
       
       return () => clearTimeout(reconnectTimer);
     }
-  }, [socketError, reconnecting]);
+  }, [socketError, reconnecting, socket]);
   
   // Fungsi untuk memulai chat
   const startChat = useCallback(async (gender: Gender, preferredGender: PreferredGender): Promise<boolean> => {
@@ -450,7 +444,7 @@ export function useAnonChat(): ChatHookReturn {
     
     // Jika socket ada tapi tidak terhubung, coba hubungkan
     if (!socket.connected) {
-      console.log('Socket not connected, reconnecting...');
+      // console.log('Socket not connected, reconnecting...');
       setError('Menghubungkan ke server chat...');
       
       // Mencoba menghubungkan ulang
@@ -484,7 +478,7 @@ export function useAnonChat(): ChatHookReturn {
       setPartnerGender(null);
       setMessages([]);
       
-      console.log(`Starting chat: gender=${gender}, preferredGender=${preferredGender}`);
+      // console.log(`Starting chat: gender=${gender}, preferredGender=${preferredGender}`);
       
       // Buat session baru
       socket.emit('create_session', {
@@ -510,7 +504,7 @@ export function useAnonChat(): ChatHookReturn {
     
     // Jika socket tidak terkoneksi, coba koneksi ulang
     if (!socket || !socket.connected) {
-      console.log('Socket not connected, reconnecting...');
+      // console.log('Socket not connected, reconnecting...');
       setError('Koneksi ke server terputus, mencoba menghubungkan ulang...');
       
       // Hapus socket lama jika ada
@@ -528,7 +522,7 @@ export function useAnonChat(): ChatHookReturn {
     
     // Check if we have a valid sessionId
     if (!sessionId) {
-      console.error('Cannot find partner: No active session ID');
+      // console.error('Cannot find partner: No active session ID');
       setError('Tidak dapat mencari partner: Tidak ada sesi aktif. Silakan mulai chat baru.');
       setLoading(false);
       return;
@@ -541,18 +535,19 @@ export function useAnonChat(): ChatHookReturn {
     // Normalisasi parameter pencarian
     const normalizedLookingFor = lookingFor === 'both' ? 'any' : lookingFor;
     
-    console.log(`Emitting find_partner event with sessionId: ${sessionId}, gender: ${gender}, lookingFor: ${normalizedLookingFor}`);
+    // console.log(`Emitting find_partner event with sessionId: ${sessionId}, gender: ${gender}, lookingFor: ${normalizedLookingFor}`);
     socket.emit('find_partner', { 
       sessionId, 
       gender, 
       lookingFor: normalizedLookingFor 
-    }, (response: any) => {
+    }, (response: { error?: string }) => {
       if (response && response.error) {
-        console.error('Error finding partner:', response.error);
+        // console.error('Error finding partner:', response.error);
         setError(response.error);
         setLoading(false);
       } else {
-        console.log('Find partner request acknowledged by server');
+        setError(null);
+        // console.log('   partner request acknowledged by server');
       }
     });
   }, [socket, sessionId]);
@@ -570,16 +565,16 @@ export function useAnonChat(): ChatHookReturn {
     }
     
     try {
-      console.log('Sending message to session:', sessionId, 'text:', text.substring(0, 20));
+      // console.log('Sending message to session:', sessionId, 'text:', text.substring(0, 20));
       
       // Kirim pesan ke server dengan format yang sesuai
       socket.emit('send_message', {
         sessionId,
         message: text // Pastikan parameter sesuai dengan yang diharapkan server
-      }, (response: any) => {
+      }, (response: { error?: string }) => {
         // Optional callback to handle errors
         if (response && response.error) {
-          console.error('Error response from server:', response.error);
+          // console.error('Error response from server:', response.error);
           setError(response.error);
           return false;
         }
