@@ -95,6 +95,12 @@ export function useAblyChat(): UseAblyChatReturn {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   const unsubscribersRef = useRef<(() => void)[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  
+  // Update messages ref whenever the messages state changes
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   
   // Helper to clean up subscriptions
   const cleanUpSubscriptions = useCallback(() => {
@@ -129,6 +135,14 @@ export function useAblyChat(): UseAblyChatReturn {
       setFoundPartner(false);
       setPartnerInfo(null);
       messageIdsRef.current.clear();
+      setIsTyping(false);
+      
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      
+      console.log('Chat ended successfully');
     } catch (err) {
       console.error('Error ending chat:', err);
       setError('Failed to end chat: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -306,30 +320,114 @@ export function useAblyChat(): UseAblyChatReturn {
       
       // Subscribe to messages - use any type for now to avoid TypeScript errors
       const { unsubscribe: messageUnsubscribe } = chatRoom.messages.subscribe((event: any) => {
-        console.log('Message event:', event);
+        console.log('Message event received:', event);
+        console.log('Event type:', event.type);
+        if (event.message) {
+          console.log('Message property:', event.message);
+          if (event.message.data) {
+            console.log('Message data:', event.message.data);
+          }
+        }
         
-        // Skip duplicate messages
-        const messageId = event.id || String(Date.now());
-        if (messageIdsRef.current.has(messageId)) {
-          console.log('Skipping duplicate message:', messageId);
+        // Extract message details, handling different message formats
+        let messageText = '';
+        let messageSender = '';
+        let messageId = '';
+        
+        // First check if we have a nested message structure (typical Ably pattern)
+        if (event.type === 'message.created' && event.message) {
+          const msg = event.message;
+          console.log('Nested message structure detected:', msg);
+          
+          // Extract message ID
+          messageId = msg.id || String(Date.now());
+          
+          // Try to extract text from different possible formats in the message object
+          if (msg.data) {
+            if (typeof msg.data === 'string') {
+              messageText = msg.data;
+              console.log('Message data is string:', messageText);
+            } else if (typeof msg.data === 'object') {
+              // For JSON data
+              if (msg.data.text) {
+                messageText = msg.data.text;
+                console.log('Found text in data object:', messageText);
+              } else if (msg.data.message) {
+                messageText = msg.data.message;
+                console.log('Found message in data object:', messageText);
+              } else {
+                console.log('Data object without text or message:', msg.data);
+                messageText = JSON.stringify(msg.data);
+              }
+            }
+          } else if (msg.text) {
+            messageText = msg.text;
+            console.log('Using message.text:', messageText);
+          } else {
+            // Last resort, stringify the whole message
+            messageText = `Message: ${msg.name || 'Unknown'}`;
+            console.log('Using fallback text:', messageText);
+          }
+          
+          // Try to extract the sender ID
+          messageSender = msg.clientId || (msg.connectionId || '').split(':')[0] || 'unknown';
+          console.log('Extracted message sender:', messageSender);
+        } else {
+          // Fallback to direct event properties
+          messageId = event.id || String(Date.now());
+          
+          // Try to extract text from different possible message formats
+          if (typeof event.data === 'string') {
+            messageText = event.data;
+            console.log('Message data is string:', messageText);
+          } else if (event.data && typeof event.data === 'object') {
+            messageText = event.data.text || '';
+            console.log('Message data is object:', event.data, 'extracted text:', messageText);
+          } else if (event.text) {
+            messageText = event.text;
+            console.log('Using event.text:', messageText);
+          }
+          
+          // Try to extract the sender ID
+          messageSender = event.clientId || (event.member && event.member.clientId) || 'unknown';
+        }
+        
+        console.log('Processed message:', { id: messageId, text: messageText, sender: messageSender });
+        
+        // Only process messages from others, our own messages are handled locally
+        if (messageSender === userId) {
+          console.log('Ignoring echo of own message');
           return;
         }
         
-        // Store message ID to prevent duplicates
+        // Skip empty messages or already processed messages
+        if (!messageText || messageIdsRef.current.has(messageId)) {
+          console.log('Skipping message: empty or duplicate', messageId);
+          return;
+        }
+        
+        // Additional check for duplicate content in the last few seconds
+        const now = Date.now();
+        const recentContentDuplicate = messagesRef.current.some(msg => 
+          msg.senderId === messageSender && 
+          msg.text === messageText && 
+          now - msg.timestamp < 3000
+        );
+        
+        if (recentContentDuplicate) {
+          console.log('Skipping recent duplicate content from same sender');
+          return;
+        }
+        
+        // Remember this message ID to prevent duplicates
         messageIdsRef.current.add(messageId);
         
-        // Process message data - access properties safely
-        const text = event.text || (event.data && typeof event.data === 'object' ? event.data.text : event.data) || '';
-        const senderId = event.clientId || (event.member && event.member.clientId) || 'unknown';
-        const isOwnMessage = senderId === userId;
-        
-        // Add message to UI
+        // Add message to the UI
         setMessages(prev => [...prev, {
           id: messageId,
-          text: text,
-          senderId: senderId,
-          timestamp: event.timestamp || Date.now(),
-          isCurrentUser: isOwnMessage
+          text: messageText,
+          senderId: messageSender,
+          timestamp: now
         }]);
       });
       
@@ -531,20 +629,39 @@ export function useAblyChat(): UseAblyChatReturn {
     try {
       // Generate message ID to track duplicates
       const messageId = uuidv4();
-      messageIdsRef.current.add(messageId);
       
-      // Add to UI immediately for responsiveness
-      setMessages(prev => [...prev, {
-        id: messageId,
-        text: text.trim(),
-        senderId: userId,
-        timestamp: Date.now()
-      }]);
+      console.log('Preparing to send message:', text.trim());
       
-      // Send to the room using Chat SDK
-      await room.messages.send({
+      // Send to the room using Chat SDK first
+      const response = await room.messages.send({
         text: text.trim()
       });
+      
+      console.log('Message send response:', response);
+      
+      // Now, check if we already have a message with the same text in the last 2 seconds (to handle potential echoes)
+      const now = Date.now();
+      const recentDuplicateExists = messagesRef.current.some(msg => 
+        msg.senderId === userId && 
+        msg.text === text.trim() && 
+        now - msg.timestamp < 2000
+      );
+      
+      // Only add to UI if not a duplicate
+      if (!recentDuplicateExists) {
+        // Add locally to UI for responsiveness
+        setMessages(prev => [...prev, {
+          id: messageId,
+          text: text.trim(),
+          senderId: userId,
+          timestamp: now
+        }]);
+        
+        // Track this message ID to prevent duplicates
+        messageIdsRef.current.add(messageId);
+      } else {
+        console.log('Prevented duplicate local message:', text.trim());
+      }
       
       // Stop typing indicator
       if (isTyping) {

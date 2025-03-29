@@ -58,9 +58,11 @@ export default function AnonChat() {
   
   // Handle sending a message
   const handleSendMessage = async () => {
-    if (!newMessage.trim()) return;
+    const trimmedMessage = newMessage.trim();
+    if (!trimmedMessage) return;
     
-    await sendMessage(newMessage.trim());
+    console.log('Sending message:', trimmedMessage);
+    await sendMessage(trimmedMessage);
     setNewMessage('');
   };
   
@@ -206,7 +208,7 @@ export default function AnonChat() {
                           : 'bg-gray-700 text-white'
                     }`}
                   >
-                    <p>{msg.text}</p>
+                    <p>{msg.text || '(empty message)'}</p>
                     <span className="text-xs opacity-75 block text-right">
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </span>
