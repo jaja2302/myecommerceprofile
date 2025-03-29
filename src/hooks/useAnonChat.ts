@@ -231,6 +231,8 @@ export function useAnonChat(): ChatHookReturn {
           autoConnect: true,
           rejectUnauthorized: false, // Add this for dev environment issues
           withCredentials: false, // May help with CORS
+          addTrailingSlash: false, // Fix for Next.js 13.3+ issue with Socket.io
+          cookie: false, // Disable cookies to avoid SameSite issues
           extraHeaders: {
             // Add custom headers to help with debugging
             'X-Client-Id': userIdRef.current,
