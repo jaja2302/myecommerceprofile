@@ -29,11 +29,11 @@ export default async function handler(
     const client = new Ably.Rest(apiKey);
     
     // Create token request with optional clientId and explicit capabilities
-    const tokenParams: any = {
+    const tokenParams: Ably.TokenParams = {
       capability: {
-        "*": ["publish", "subscribe", "presence", "history", "channel-metadata", "chat"],
-        "waiting:*": ["publish", "subscribe", "presence", "history", "channel-metadata", "chat"],
-        "chat:*": ["publish", "subscribe", "presence", "history", "channel-metadata", "chat"]
+        "*": ["publish", "subscribe", "presence", "history", "channel-metadata"],
+        "waiting:*": ["publish", "subscribe", "presence", "history", "channel-metadata"],
+        "chat:*": ["publish", "subscribe", "presence", "history", "channel-metadata"]
       }
     };
     

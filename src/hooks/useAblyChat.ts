@@ -8,7 +8,6 @@ import {
   RoomStatusChange,
   Room,
   RoomOptions,
-  MessageEvent,
   PresenceMember
 } from "@ably/chat";
 import { Gender, PreferredGender } from '@/types';
@@ -27,6 +26,35 @@ export interface AblyUserMetadata {
   nickname: string;
   gender: Gender;
   lookingFor: PreferredGender;
+}
+
+// Interfaces for Ably event types
+interface TypingEvent {
+  currentlyTyping: Set<string>;
+}
+
+interface MessageData {
+  text?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+interface MessageEvent {
+  type?: string;
+  id?: string;
+  clientId?: string;
+  connectionId?: string;
+  data?: string | MessageData;
+  text?: string;
+  member?: { clientId?: string };
+  message?: {
+    id?: string;
+    data?: string | MessageData;
+    clientId?: string;
+    connectionId?: string;
+    text?: string;
+    name?: string;
+  };
 }
 
 export interface UseAblyChatReturn {
@@ -89,7 +117,6 @@ export function useAblyChat(): UseAblyChatReturn {
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [foundPartner, setFoundPartner] = useState<boolean>(false);
-  const [partnerInfo, setPartnerInfo] = useState<any>(null);
   
   // Refs
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -133,7 +160,6 @@ export function useAblyChat(): UseAblyChatReturn {
       setMessages([]);
       setPartnerIsTyping(false);
       setFoundPartner(false);
-      setPartnerInfo(null);
       messageIdsRef.current.clear();
       setIsTyping(false);
       
@@ -221,7 +247,7 @@ export function useAblyChat(): UseAblyChatReturn {
   }, [chatClient, ablyClient, initializeAbly, cleanUpSubscriptions]);
   
   // Helper function to check if users are compatible matches
-  const isCompatibleMatch = useCallback((userData: any, partnerData: any) => {
+  const isCompatibleMatch = useCallback((userData: unknown, partnerData: unknown) => {
     // Simple compatibility check - can be expanded based on app requirements
     if (!userData || !partnerData) return false;
     
@@ -232,8 +258,8 @@ export function useAblyChat(): UseAblyChatReturn {
   // Helper function to create or join a chat
   const createOrJoinChat = useCallback(async (
     partnerId: string,
-    partnerData: any,
-    userMetadata: any
+    partnerData: unknown,
+    userMetadata: unknown
   ) => {
     if (!chatClient || !ablyClient) return;
     
@@ -272,7 +298,7 @@ export function useAblyChat(): UseAblyChatReturn {
         console.log('Entered presence in chat room');
         
         // Monitor typing indicators - using proper structure from Ably docs
-        const { unsubscribe: typingUnsubscribe } = chatRoom.typing.subscribe((event: any) => {
+        const { unsubscribe: typingUnsubscribe } = chatRoom.typing.subscribe((event: TypingEvent) => {
           console.log('Typing event:', event);
           
           // Check the currently typing set of clientIds
@@ -297,7 +323,7 @@ export function useAblyChat(): UseAblyChatReturn {
             // Partner left the chat
             setMessages(prev => [...prev, {
               id: uuidv4(),
-              text: `${partnerData.nickname || 'Your partner'} has left the chat`,
+              text: `${(partnerData as { nickname?: string })?.nickname || 'Your partner'} has left the chat`,
               senderId: 'system',
               timestamp: Date.now(),
               isSystem: true
@@ -314,12 +340,11 @@ export function useAblyChat(): UseAblyChatReturn {
       
       // Set current room and partner data
       setRoom(chatRoom);
-      setPartnerInfo(partnerData);
       setFoundPartner(true);
       setIsSearching(false);
       
       // Subscribe to messages - use any type for now to avoid TypeScript errors
-      const { unsubscribe: messageUnsubscribe } = chatRoom.messages.subscribe((event: any) => {
+      const { unsubscribe: messageUnsubscribe } = chatRoom.messages.subscribe((event: MessageEvent) => {
         console.log('Message event received:', event);
         console.log('Event type:', event.type);
         if (event.message) {
@@ -437,7 +462,7 @@ export function useAblyChat(): UseAblyChatReturn {
       // Update UI with partner info
       setMessages([{
         id: uuidv4(),
-        text: `You are now chatting with ${partnerData.nickname || 'Anonymous'}`,
+        text: `You are now chatting with ${(partnerData as { nickname?: string })?.nickname || 'Anonymous'}`,
         senderId: 'system',
         timestamp: Date.now(),
         isSystem: true
@@ -508,7 +533,7 @@ export function useAblyChat(): UseAblyChatReturn {
                 
                 // Create or join chat room with the partner
                 await createOrJoinChat(
-                  (partnerData as any).userId || partner.clientId,
+                  (partnerData as { userId?: string }).userId || partner.clientId,
                   partnerData,
                   userMetadata
                 );
@@ -533,7 +558,7 @@ export function useAblyChat(): UseAblyChatReturn {
                 
                 // Create chat with new partner
                 createOrJoinChat(
-                  (newPartnerData as any).userId || memberUpdate.clientId,
+                  (newPartnerData as { userId?: string }).userId || memberUpdate.clientId,
                   newPartnerData,
                   userMetadata
                 ).then(() => {
@@ -582,7 +607,6 @@ export function useAblyChat(): UseAblyChatReturn {
       // Reset state
       setIsSearching(true);
       setFoundPartner(false);
-      setPartnerInfo(null);
       messageIdsRef.current.clear();
       
       // Clear subscriptions

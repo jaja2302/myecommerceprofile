@@ -66,13 +66,13 @@ export function getAblyClient(): Ably.Realtime {
       });
       
       // Add event listener for connection failures
-      ablyClient.connection.on('failed', (err: any) => {
-        console.error('Ably connection failed:', err);
+      ablyClient.connection.on('failed', (stateChange) => {
+        console.error('Ably connection failed:', stateChange.reason);
         
         // Log the detailed error for troubleshooting
-        if (err && err.message) {
-          if (err.message.includes('API key') || err.message.includes('401')) {
-            console.error('ABLY API KEY ISSUE - Please check your environment variables', err);
+        if (stateChange.reason && stateChange.reason.message) {
+          if (stateChange.reason.message.includes('API key') || stateChange.reason.message.includes('401')) {
+            console.error('ABLY API KEY ISSUE - Please check your environment variables', stateChange.reason);
           }
         }
       });
