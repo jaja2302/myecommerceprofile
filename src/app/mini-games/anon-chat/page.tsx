@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAnonChat } from '@/hooks/useAnonChat';
 import { Gender, PreferredGender } from '@/types';
 import { Navbar } from '@/components/Navbar';
@@ -27,6 +27,8 @@ export default function AnonChatPage() {
   const [findingPartner, setFindingPartner] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [partnerLeftNotification, setPartnerLeftNotification] = useState<string | null>(null);
+  const lastPartnerIdRef = useRef<string | null>(null);
 
   // Force reconnect function
   const handleReconnect = async () => {
@@ -69,6 +71,80 @@ export default function AnonChatPage() {
       }
     };
   }, [sessionId, findingPartner, findPartner, userGender, preferredGender]);
+
+  // Effect to monitor when partner leaves chat
+  useEffect(() => {
+    // If we had a partner before (stored in ref) but now partnerId is null
+    // and we're not actively looking for partners (not in findingPartner state)
+    if (lastPartnerIdRef.current && !partnerId && !findingPartner) {
+      // Show notification that partner left
+      setPartnerLeftNotification("Your chat partner has left the conversation.");
+      // Return to gender selection screen with notification
+      setShowGenderSelection(true);
+      
+      // Clear the notification after some time
+      const timer = setTimeout(() => {
+        setPartnerLeftNotification(null);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+    
+    // Update our reference when partnerId changes
+    lastPartnerIdRef.current = partnerId;
+  }, [partnerId, findingPartner]);
+
+  // Effect to monitor error messages related to chat partner
+  useEffect(() => {
+    // If error contains specific message about partner not found, it means partner left
+    if (error && (
+      error.includes("partner tidak ditemukan") || 
+      error.includes("No partner") ||
+      error.includes("Chat telah berakhir") ||
+      error.includes("Partner telah")
+    )) {
+      // Force end the current chat and reset UI state
+      endChat();
+      setShowGenderSelection(true);
+      setPartnerLeftNotification("Your chat partner has left the conversation.");
+      setErrorMessage(null); // Clear the error message
+      
+      // Clear the notification after some time
+      const timer = setTimeout(() => {
+        setPartnerLeftNotification(null);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [error, endChat]);
+
+  // Add custom listener for partner left event
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePartnerLeft = (event: Event) => {
+      console.log('Received anonchat_partner_left event');
+      const customEvent = event as CustomEvent;
+      const message = customEvent.detail?.message || 'Your chat partner has left the conversation.';
+      
+      // Update UI to show partner left
+      setShowGenderSelection(true);
+      setPartnerLeftNotification(message);
+      
+      // Clear the notification after some time
+      setTimeout(() => {
+        setPartnerLeftNotification(null);
+      }, 5000);
+    };
+
+    // Add event listener
+    window.addEventListener('anonchat_partner_left', handlePartnerLeft);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('anonchat_partner_left', handlePartnerLeft);
+    };
+  }, []);
 
   // Fungsi untuk menangani mulai chat
   const handleStartChat = async () => {
@@ -115,6 +191,7 @@ export default function AnonChatPage() {
     if (partnerId) {
       setFindingPartner(false);
       setShowGenderSelection(false);
+      setPartnerLeftNotification(null); // Clear any previous notifications
     }
   }, [partnerId]);
 
@@ -157,6 +234,13 @@ export default function AnonChatPage() {
           <p className="text-gray-500">
             Chat anonymously with random people
           </p>
+          
+          {/* Partner Left Notification */}
+          {partnerLeftNotification && (
+            <div className="mt-3 p-3 bg-amber-100 border border-amber-400 text-amber-700 rounded-md text-sm">
+              <p>{partnerLeftNotification}</p>
+            </div>
+          )}
           
           {/* Connection Status */}
           <div className={`mt-2 py-2 px-3 rounded-md text-sm ${
@@ -282,6 +366,30 @@ export default function AnonChatPage() {
 
   // Tampilkan chat window sederhana
   const renderChatWindow = () => {
+    // If partnerId is null but this component is being rendered,
+    // we need to force back to the gender selection screen
+    if (!partnerId) {
+      // Use setTimeout to avoid state changes during render
+      setTimeout(() => {
+        setShowGenderSelection(true);
+        setPartnerLeftNotification("Your chat partner has left the conversation.");
+      }, 0);
+      
+      // Return a loading state while the timeout executes
+      return (
+        <div className="flex items-center justify-center h-[calc(100vh-140px)]">
+          <div className="text-center">
+            <p>Chat has ended. Returning to selection screen...</p>
+            <div className="mt-4 flex justify-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce"></div>
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '600ms' }}></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col h-[calc(100vh-140px)]">
         <div className="p-4 bg-white shadow-sm flex items-center justify-between">

@@ -3,8 +3,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Gender, ChatMessage } from '@/hooks/useAnonChat';
-import { AlertCircle, Send, X } from 'lucide-react';
+import { ChatMessage } from '@/hooks/useAnonChat';
+import { Gender } from '@/types';
+import { AlertCircle, Send, X, Info } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertTitle } from '@/components/ui/alert';
@@ -89,7 +90,9 @@ export function ChatWindow({
           </Avatar>
           <div>
             <div className="font-medium">Anonymous {partnerGender === 'male' ? 'Male' : partnerGender === 'female' ? 'Female' : 'Person'}</div>
-            <div className="text-xs text-muted-foreground">Connected</div>
+            <div className="text-xs text-muted-foreground">
+              {partnerId ? 'Connected' : 'Disconnected'}
+            </div>
           </div>
         </div>
         
@@ -104,22 +107,27 @@ export function ChatWindow({
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${message.sender === 'system' ? 'justify-center' : message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div
-                className={`max-w-[75%] px-4 py-2 rounded-lg ${
-                  message.sender === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : message.sender === 'system'
-                    ? 'bg-gray-200 text-gray-800'
-                    : 'bg-secondary text-secondary-foreground'
-                }`}
-              >
-                <div className="break-words">{message.text}</div>
-                <div className="text-xs opacity-70 text-right mt-1">
-                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {message.sender === 'system' ? (
+                <div className="bg-muted px-3 py-2 rounded-md text-xs text-muted-foreground flex items-center space-x-1 max-w-[80%]">
+                  <Info className="h-3 w-3" />
+                  <span>{message.text}</span>
                 </div>
-              </div>
+              ) : (
+                <div
+                  className={`max-w-[75%] px-4 py-2 rounded-lg ${
+                    message.sender === 'user'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-secondary-foreground'
+                  }`}
+                >
+                  <div className="break-words">{message.text}</div>
+                  <div className="text-xs opacity-70 text-right mt-1">
+                    {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           <div ref={messagesEndRef} />
@@ -139,13 +147,18 @@ export function ChatWindow({
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
-            disabled={sending}
+            disabled={sending || !partnerId}
             className="flex-1"
           />
-          <Button type="submit" disabled={!newMessage.trim() || sending}>
+          <Button type="submit" disabled={!newMessage.trim() || sending || !partnerId}>
             <Send className="h-4 w-4" />
           </Button>
         </div>
+        {!partnerId && (
+          <div className="mt-2 text-center text-xs text-red-500">
+            Chat has ended. The message input is disabled.
+          </div>
+        )}
       </form>
     </div>
   );

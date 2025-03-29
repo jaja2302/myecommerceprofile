@@ -356,17 +356,67 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
       socket.on('end_chat', (data: { sessionId: string }) => {
         try {
           const { sessionId } = data;
+          
+          // Log the request with more detail
+          console.log(`[END_CHAT] Received end_chat request for session ${sessionId}`);
+          
           const session = chatSessions[sessionId];
           
-          if (!session) return;
+          if (!session) {
+            console.log(`[END_CHAT] Session ${sessionId} not found, cannot end chat`);
+            socket.emit('error', { message: 'Session not found' });
+            return;
+          }
+          
+          console.log(`[END_CHAT] Processing end_chat for session ${sessionId}, user ${session.userId}, status: ${session.status}, partner: ${session.partnerId}`);
           
           // Jika sedang chatting, putus koneksi dengan partner
           if (session.status === 'chatting' && session.partnerId) {
-            const partnerSession = chatSessions[session.partnerId];
-            if (partnerSession) {
+            console.log(`[END_CHAT] Looking for partner sessions for user ${session.partnerId}`);
+            
+            // Log all sessions for debugging
+            console.log('[END_CHAT] All active chat sessions:');
+            Object.entries(chatSessions).forEach(([id, s]) => {
+              if (s.status === 'chatting') {
+                console.log(`- Session ${id}: user=${s.userId}, partner=${s.partnerId}, status=${s.status}`);
+              }
+            });
+            
+            // Find all partner sessions - there should be exactly one where this partner is active
+            const partnerSessions = Object.values(chatSessions).filter(s => 
+              s.userId === session.partnerId && 
+              s.status === 'chatting' && 
+              s.partnerId === session.userId
+            );
+            
+            console.log(`[END_CHAT] Found ${partnerSessions.length} partner sessions`);
+            
+            partnerSessions.forEach(partnerSession => {
+              console.log(`[END_CHAT] Notifying partner in session ${partnerSession.id} that chat has ended`);
+              
+              // Update partner session
               partnerSession.status = 'disconnected';
               partnerSession.partnerId = null;
-            }
+              
+              // Debug emit status
+              const partnerRoomCount = io.sockets.adapter.rooms.get(partnerSession.id)?.size || 0;
+              console.log(`[END_CHAT] Partner room ${partnerSession.id} has ${partnerRoomCount} sockets`);
+              
+              // Use broadcast to ensure all sockets in the room get the message
+              io.to(partnerSession.id).emit('chat_ended', {
+                message: 'Partner telah mengakhiri chat'
+              });
+              
+              // Emit a system message about the chat ending
+              io.to(partnerSession.id).emit('new_message', {
+                id: `system-chat-ended-${Date.now()}`,
+                text: 'Your chat partner has ended the conversation',
+                sender: 'system',
+                timestamp: Date.now()
+              });
+            });
+          } else {
+            console.log(`[END_CHAT] Session ${sessionId} is not in chatting state or has no partner`);
           }
           
           // Ubah status session
@@ -375,8 +425,11 @@ const SocketHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
           
           // Beri tahu user bahwa chat telah berakhir
           socket.emit('chat_ended', { message: 'Chat telah berakhir' });
+          
+          // Log completion
+          console.log(`[END_CHAT] Successfully ended chat for session ${sessionId}`);
         } catch (err) {
-          console.error('Error ending chat:', err);
+          console.error('[END_CHAT] Error ending chat:', err);
           socket.emit('error', { message: 'Error ending chat' });
         }
       });

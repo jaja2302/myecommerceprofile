@@ -350,10 +350,34 @@ export function useAnonChat(): ChatHookReturn {
         });
         
         newSocket.on('chat_ended', (data) => {
-          console.log('Chat ended:', data);
+          console.log('Chat ended event received:', data);
+          
+          // Immediately clear partner information
           setPartnerId(null);
           setPartnerGender(null);
+          
+          // Add a system message to the chat that partner left
+          setMessages(prev => [
+            ...prev, 
+            {
+              id: `system-chat-ended-${Date.now()}`,
+              text: data?.message || 'Chat has ended. Your partner has left the conversation.',
+              sender: 'system',
+              timestamp: Date.now()
+            }
+          ]);
+          
+          // Set the error notification message
           setError(data && data.message ? data.message : 'Chat telah berakhir');
+          
+          // Send custom event for component to detect partner leaving
+          if (isBrowser) {
+            const customEvent = new CustomEvent('anonchat_partner_left', { 
+              detail: { message: data?.message || 'Chat has ended' } 
+            });
+            window.dispatchEvent(customEvent);
+            console.log('Dispatched anonchat_partner_left event');
+          }
         });
         
         newSocket.on('disconnect', (reason) => {
@@ -540,26 +564,25 @@ export function useAnonChat(): ChatHookReturn {
       return false;
     }
     
+    if (!partnerId) {
+      setError('Tidak dapat mengirim pesan: Partner tidak tersedia');
+      return false;
+    }
+    
     try {
       console.log('Sending message to session:', sessionId, 'text:', text.substring(0, 20));
-      
-      // Remove the local message addition to prevent duplicates
-      // The server will send back the message with the correct sender
-      // Commented out to prevent duplicates:
-      // 
-      // const newMessage: ChatMessage = {
-      //   id: uuidv4(),
-      //   text,
-      //   sender: 'user',
-      //   timestamp: Date.now()
-      // };
-      // 
-      // setMessages(prev => [...prev, newMessage]);
       
       // Kirim pesan ke server dengan format yang sesuai
       socket.emit('send_message', {
         sessionId,
         message: text // Pastikan parameter sesuai dengan yang diharapkan server
+      }, (response: any) => {
+        // Optional callback to handle errors
+        if (response && response.error) {
+          console.error('Error response from server:', response.error);
+          setError(response.error);
+          return false;
+        }
       });
       
       return true;
@@ -568,7 +591,7 @@ export function useAnonChat(): ChatHookReturn {
       setError('Gagal mengirim pesan. Silakan coba lagi.');
       return false;
     }
-  }, [socket, sessionId]);
+  }, [socket, sessionId, partnerId]);
   
   // Fungsi untuk mengakhiri chat
   const endChat = useCallback(async (): Promise<boolean> => {
@@ -593,6 +616,17 @@ export function useAnonChat(): ChatHookReturn {
       // Reset state chat
       setPartnerId(null);
       setPartnerGender(null);
+      
+      // Add a system message that you ended the chat
+      setMessages(prev => [
+        ...prev, 
+        {
+          id: `system-chat-ended-by-user-${Date.now()}`,
+          text: 'You ended the chat',
+          sender: 'system',
+          timestamp: Date.now()
+        }
+      ]);
       
       return true;
     } catch (err) {
