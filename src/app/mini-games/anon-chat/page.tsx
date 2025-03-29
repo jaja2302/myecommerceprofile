@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAnonChat } from '@/hooks/useAnonChat';
 import { Gender, PreferredGender } from '@/types';
-import { Navbar } from '@/components/Navbar';
-import { Footer } from '@/components/Footer';
+import Link from 'next/link';
 
 export default function AnonChatPage() {
   const { 
@@ -25,24 +24,10 @@ export default function AnonChatPage() {
   const [preferredGender, setPreferredGender] = useState<PreferredGender>('both');
   const [showGenderSelection, setShowGenderSelection] = useState(true);
   const [findingPartner, setFindingPartner] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [partnerLeftNotification, setPartnerLeftNotification] = useState<string | null>(null);
   const lastPartnerIdRef = useRef<string | null>(null);
 
-  // Force reconnect function
-  const handleReconnect = async () => {
-    if (window) {
-      console.log("Trying to force reconnect...");
-      localStorage.removeItem('anonchat_session_creation_lock');
-      localStorage.removeItem('anonchat_last_session_id');
-      
-      // Force page reload after a delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
-    }
-  };
 
   // Effect to monitor sessionId changes and trigger partner finding
   useEffect(() => {
@@ -258,28 +243,10 @@ export default function AnonChatPage() {
                     <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
                     <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style={{ animationDelay: '600ms' }}></div>
                   </div>
-                  <button 
-                    onClick={handleReconnect}
-                    className="mt-2 px-3 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors"
-                  >
-                    Refresh Connection
-                  </button>
                 </div>
               )
             }
           </div>
-
-          {(error || errorMessage) && (
-            <div className="mt-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
-              <p>{error || errorMessage}</p>
-              <button 
-                onClick={handleReconnect}
-                className="mt-2 px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-              >
-                Refresh Connection
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="space-y-8 w-full max-w-xs">
@@ -467,8 +434,16 @@ export default function AnonChatPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-
-
+      <div className="p-4">
+        <Link href="/mini-games">
+          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+            Back to mini games
+          </button>
+        </Link>
+      </div>
       <main className="flex-1 z-10">
         {partnerId ? (
           renderChatWindow()
@@ -476,8 +451,6 @@ export default function AnonChatPage() {
           findingPartner ? renderFindingPartner() : renderProfileSelection()
         )}
       </main>
-
-      <Footer />
     </div>
   );
 } 
